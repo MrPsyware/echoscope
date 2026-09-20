@@ -1,0 +1,28 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .tools/platformio
+            .pio/libdeps
+          key: esp32-${{ runner.os }}-${{ hashFiles('platformio.ini', 'requirements-build.txt') }}
+      - run: make setup
+      - run: make test
+      - run: make firmware
+      - uses: actions/upload-artifact@v4
+        with:
+          name: echoscope-firmware
+          path: dist/

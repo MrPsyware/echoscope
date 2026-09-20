@@ -1,0 +1,10 @@
+.tools/
+.pio/
+.vscode/
+dist/
+.backups/
+.env
+.env.*
+*.log
+*-backup.bin
+__pycache__/
