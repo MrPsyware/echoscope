@@ -1,6 +1,11 @@
 #pragma once
 #include <cstdint>
 namespace sky {
+// A timestamp sampled just before opening setup must not look five minutes old.
+inline bool setupExpired(uint32_t now,uint32_t opened) {
+    return static_cast<int32_t>(now-opened)>=300000;
+}
+
 struct Activity {
     static constexpr uint32_t filterTimeout=10000, sleepTimeout=3600000;
     uint32_t lastActivity=0,lastTouch=0;

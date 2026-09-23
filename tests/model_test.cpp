@@ -41,6 +41,12 @@ int main() {
     Point a={-20,0},b={20,0}; assert(clipToCircle(a,b,10) && a.east==-10 && b.east==10);
     a={20,20}; b={30,30}; assert(!clipToCircle(a,b,10));
     m.reset(); assert(m.trails==trails.data() && !m.selectMode && !m.data.count);
+    assert(!setupExpired(1000,1001)); // stale loop timestamp before portal opened
+    assert(!setupExpired(1001,1001));
+    assert(!setupExpired(301000,1001));
+    assert(setupExpired(301001,1001));
+    assert(!setupExpired(50,UINT32_MAX-100));
+    assert(setupExpired(300000,UINT32_MAX-100));
     Activity idle;
     assert(!idle.tick(9999) && idle.filterVisible);
     assert(!idle.tick(10000) && !idle.filterVisible);
@@ -75,11 +81,12 @@ int main() {
     assert(delayed.takeClick(390) && !delayed.takeClick(400));
     assert(button.sample(true,1000)==ButtonDebounce::None);
     assert(button.sample(true,1030)==ButtonDebounce::Down);
-    assert(button.sample(true,2529)==ButtonDebounce::None);
-    assert(button.sample(true,2530)==ButtonDebounce::Hold);
-    assert(button.sample(true,2600)==ButtonDebounce::None);
-    assert(button.sample(false,2700)==ButtonDebounce::None);
-    assert(button.sample(false,2730)==ButtonDebounce::Up && button.longSent);
+    assert(button.sample(true,2530)==ButtonDebounce::None); // old threshold no longer opens setup
+    assert(button.sample(true,6029)==ButtonDebounce::None);
+    assert(button.sample(true,6030)==ButtonDebounce::Hold);
+    assert(button.sample(true,6100)==ButtonDebounce::None);
+    assert(button.sample(false,6200)==ButtonDebounce::None);
+    assert(button.sample(false,6230)==ButtonDebounce::Up && button.longSent);
     ButtonDebounce rollover;
     assert(rollover.sample(true,UINT32_MAX-10)==ButtonDebounce::None);
     assert(rollover.sample(true,20)==ButtonDebounce::Down);

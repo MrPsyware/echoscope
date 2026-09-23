@@ -2,6 +2,7 @@
 #include <cstdint>
 namespace sky {
 struct ButtonDebounce {
+    static constexpr uint32_t holdMs=5000;
     enum Event { None, Down, Up, Hold };
     bool raw=false,pressed=false,longSent=false;
     uint32_t changed=0,downAt=0;
@@ -12,7 +13,7 @@ struct ButtonDebounce {
             if(pressed) { downAt=now; longSent=false; return Down; }
             return Up;
         }
-        if(pressed && !longSent && uint32_t(now-downAt)>=1500) {
+        if(pressed && !longSent && uint32_t(now-downAt)>=holdMs) {
             longSent=true; return Hold;
         }
         return None;

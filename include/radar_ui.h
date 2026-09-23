@@ -17,7 +17,7 @@ inline char photoReg[16]{},photoCredit[128]{},photoLink[256]{},photoStatus[48]="
 inline lv_img_dsc_t photoImage{};
 inline std::atomic<bool> asleep{false};
 inline int footerSplitX=centre;
-inline bool settings=false;
+inline bool settings=false,setupOpeningTouch=false;
 inline std::atomic<bool> requestFeed{false};
 inline char status[80]="Starting", setupPassword[20]="", setupAddress[24]="192.168.4.1";
 inline void line(int x,int y,int x2,int y2,uint32_t color,int width=1,lv_opa_t opacity=LV_OPA_COVER) {

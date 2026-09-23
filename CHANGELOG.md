@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Fix setup immediately expiring when the loop timestamp predates the portal opening time.
+- Require a five-second knob hold for setup.
+- Consume pending clicks and the opening touch release so setup stays visible until a new interaction or the normal five-minute timeout.
+
 ## 0.3.0
 
 - Add an optional Docker photo service using Planespotters thumbnails, bounded in-memory caching and display-ready RGB565 packets with attribution.

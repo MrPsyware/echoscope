@@ -35,7 +35,7 @@ Stop it with `docker compose down`. There are no persistent data volumes.
 ## Configure the knob
 
 1. Flash the matching EchoScope firmware.
-2. Hold the knob for 1.5 seconds to unlock setup.
+2. Hold the knob for 5 seconds to unlock setup.
 3. Open the knob's LAN IP in a browser, or use its setup Wi-Fi.
 4. Enter `http://YOUR-DOCKER-SERVER-IP:8086` in **Photo service URL**.
    Do not use localhost: that would refer to the knob itself.

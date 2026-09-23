@@ -33,7 +33,7 @@ The user has confirmed working display, Wi-Fi, live aircraft retrieval, touch/de
 | Touch an aircraft | Select it and open details | Tap to return to radar |
 | Touch blank radar space | Open the highlighted aircraft | Tap to return to radar |
 | Tap bottom range / aircraft count | Select zoom / aircraft-selection mode | — |
-| Hold knob 1.5 seconds | Open Wi-Fi/location setup | Open Wi-Fi/location setup |
+| Hold knob 5 seconds | Open Wi-Fi/location setup | Open Wi-Fi/location setup |
 
 The active footer section is bold and brighter: **50 km** for zoom, or **2 aircraft** for selection. Touch and mechanical-click events are combined into one gesture, so pressing the screen does not immediately undo the touch action. A bare click is deferred by 180 ms to allow touch detection.
 
@@ -154,7 +154,7 @@ Version 0.2.5 also logs the approximate zero-based parser stopping offset, a 200
 
 Version 0.2.6 fixes large-response corruption in the pinned Arduino core by accumulating response bytes in a fixed-capacity PSRAM buffer instead of growing an Arduino String. The successful-response buffer is 512 KiB, freed after each request. JSON failure diagnostics remain enabled.
 
-Version 0.2.7 samples the mechanical button in a separate task every roughly 5 ms, with 30 ms debounce, so a radar render cannot hide a short press. Timestamped button events are handled by the UI; touch overlap suppression and the 1.5-second setup hold remain. Serial `[input]` lines show releases, touch overlap and accepted clicks.
+Version 0.2.7 samples the mechanical button in a separate task every roughly 5 ms, with 30 ms debounce, so a radar render cannot hide a short press. Timestamped button events are handled by the UI; touch overlap suppression and the five-second setup hold remain. Serial `[input]` lines show releases, touch overlap and accepted clicks.
 
 ### Aircraft classes and filters (0.2.8)
 
@@ -172,7 +172,7 @@ After one hour without touch, press or rotation, the panel turns off and radar r
 
 ### Optional aircraft photos (0.3.0)
 
-The [photo service](photo-service/README.md) runs in Docker on another LAN computer. Start it with `make docker` from the repository root (listens on `0.0.0.0:8086`), then hold the knob for 1.5 seconds to unlock its web setup. Enter `http://YOUR-SERVER-IP:8086` in **Photo service URL**, test and save. Leaving it blank disables photos.
+The [photo service](photo-service/README.md) runs in Docker on another LAN computer. Start it with `make docker` from the repository root (listens on `0.0.0.0:8086`), then hold the knob for 5 seconds to unlock its web setup. Enter `http://YOUR-SERVER-IP:8086` in **Photo service URL**, test and save. Leaving it blank disables photos.
 
 On aircraft details, tap **PHOTO >** to request the actual aircraft's thumbnail by registration. Tap or press to return to flight details. Photos retain photographer credit; open `http://KNOB-IP/photo` for the original-photo link. The service does not store photographs on disk. Missing photos and unavailable servers leave the radar usable. New photo requests pause during standby, and obsolete responses are discarded. The firmware accepts only the bounded image protocol; it does not decode JPEGs. See the service README for deployment, provider and protocol details.
 

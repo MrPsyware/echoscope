@@ -118,11 +118,12 @@ void controls(lv_timer_t *) {
 void touch(lv_event_t *event) {
     const auto code=lv_event_get_code(event); const uint32_t now=millis();
     static bool wakeTouch=false;
-    if(code==LV_EVENT_PRESSED) { wakeTouch=wakeForInput(now,true); ui::input.touchBegin(now); return; }
+    if(code==LV_EVENT_PRESSED) { ui::setupOpeningTouch=false; wakeTouch=wakeForInput(now,true); ui::input.touchBegin(now); return; }
     if(code==LV_EVENT_PRESSING) { wakeForInput(now,true); return; }
     if(code==LV_EVENT_RELEASED || code==LV_EVENT_PRESS_LOST) { wakeForInput(now,true); ui::input.touchEnd(now); return; }
     if(code!=LV_EVENT_SHORT_CLICKED) return;
     if(wakeTouch) { wakeTouch=false; return; }
+    if(ui::setupOpeningTouch) { ui::setupOpeningTouch=false; return; }
     lv_indev_t *input=lv_indev_get_act(); if(!input) return;
     lv_point_t p; lv_indev_get_point(input,&p);
     lv_area_t area; lv_obj_get_coords(ui::canvas,&area);
@@ -176,7 +177,7 @@ void testPhotoService() {
     http.end(); server.send(ok?200:502,"text/plain",ok?"Photo service connected (protocol 1).":"Cannot reach a compatible photo service. Check its LAN IP and port.");
 }
 void setupPage() {
-    if(!portal) { server.send(403,"text/plain","Hold the knob for 1.5 seconds to enable setup."); return; }
+    if(!portal) { server.send(403,"text/plain","Hold the knob for 5 seconds to enable setup."); return; }
     String page=R"HTML(<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>EchoScope setup</title>
 <style>body{background:#071918;color:#e8f8f4;font:17px system-ui;max-width:440px;margin:40px auto;padding:24px}h1{color:#68f3ae}label{display:block;margin:22px 0 6px}input,button{box-sizing:border-box;width:100%;padding:13px;border-radius:8px;border:1px solid #52716a;font:inherit}button{background:#68f3ae;margin-top:26px}p{line-height:1.5}</style>
 <h1>EchoScope</h1><p>Choose your home Wi-Fi and the centre of your radar. Coordinates are decimal degrees; west and south are negative.</p><form method="post" action="/save">
@@ -222,7 +223,7 @@ void openPortal() {
         dns.start(53,"*",WiFi.softAPIP()); portal=true;
     }
     portalStarted=millis();
-    lvgl_port_lock(-1); ui::settings=true; lvgl_port_unlock();
+    lvgl_port_lock(-1); ui::settings=true; ui::setupOpeningTouch=ui::input.touching; ui::input.pending=false; lvgl_port_unlock();
 }
 // Keep remote text single-line and bounded, including HTML error pages.
 void logFeedBytes(const char *label,const char *value,size_t length) {
@@ -427,7 +428,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("EchoScope 0.3.0 / optional photo service");
+    Serial.println("EchoScope 0.3.1 / five-second setup hold and timeout fix");
     Serial.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
@@ -484,8 +485,8 @@ void setup() {
     else { demoFrame(millis()); openPortal(); }
 }
 void loop() {
-    const uint32_t now=millis();
     if(requestPortal.exchange(false)) openPortal();
+    const uint32_t now=millis();
     if(ui::requestFeed.exchange(false)) nextFetch=now;
     server.handleClient(); if(portal) dns.processNextRequest();
     if(ui::asleep.load()) { delay(20); return; }
@@ -493,7 +494,7 @@ void loop() {
         static uint32_t lastDemo=0;
         if(uint32_t(now-lastDemo)>1000) { demoFrame(now); lastDemo=now; }
     } else if(WiFi.status()==WL_CONNECTED) {
-        if(portal && uint32_t(now-portalStarted)>300000) { dns.stop(); WiFi.softAPdisconnect(true); portal=false; lvgl_port_lock(-1); ui::settings=false; lvgl_port_unlock(); }
+        if(portal && sky::setupExpired(millis(),portalStarted)) { dns.stop(); WiFi.softAPdisconnect(true); portal=false; lvgl_port_lock(-1); ui::settings=false; lvgl_port_unlock(); }
         if(int32_t(now-nextFetch)>=0) fetch();
         else fetchPhoto();
     } else {
