@@ -2,10 +2,23 @@
 #include "input_gate.h"
 #include "activity.h"
 #include "button_debounce.h"
+#include "network_policy.h"
 #include <cassert>
 #include <iostream>
 int main() {
     using namespace sky;
+    NetworkPolicy net;
+    assert(net.fallback(false,false,0));
+    assert(!net.fallback(true,false,29999));
+    assert(net.fallback(true,false,30000));
+    assert(!net.fallback(true,true,40000));
+    assert(!net.fallback(true,false,41000));
+    assert(!net.fallback(true,false,70999));
+    assert(net.fallback(true,false,71000));
+    assert(!net.fallback(true,true,UINT32_MAX-100));
+    assert(!net.fallback(true,false,UINT32_MAX-50));
+    assert(!net.fallback(true,false,100));
+    assert(net.fallback(true,false,30000));
     auto n=project(51.6,0,51.5,0); assert(n.north>11 && n.north<11.2 && std::abs(n.east)<0.01);
     auto e=project(51.5,0.1,51.5,0); assert(e.east>6.9 && e.east<7 && std::abs(e.north)<0.01);
     auto wrap=project(0,-179.9,0,179.9); assert(wrap.east>22 && wrap.east<22.3);

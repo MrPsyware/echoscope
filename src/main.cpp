@@ -1,3 +1,4 @@
+#include "network_policy.h"
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -31,7 +32,8 @@ uint32_t photoRetryAt=0;
 char photoAttempt[16]{};
 lv_color_t *photoPixels=nullptr;
 double homeLat=0,homeLon=0;
-bool configured=false,portal=false;
+bool configured=false,portal=false,apActive=false;
+sky::NetworkPolicy networkPolicy;
 uint32_t portalStarted=0,nextFetch=0,nextReconnect=0;
 uint32_t retryDelay=5000;
 std::atomic<bool> requestPortal{false};
@@ -102,7 +104,6 @@ void controls(lv_timer_t *) {
     }
     if(ui::input.takeClick(millis())) {
         if(ui::settings) ui::settings=false;
-        else if(ui::model.details && ui::photoView) ui::photoView=false;
         else ui::model.press(now);
         Serial.printf("[input] Click accepted; rotation=%s\n",ui::model.selectMode?"aircraft":"range");
     }
@@ -208,7 +209,7 @@ void saveSetup() {
     if(!newPassword.length() && newSSID==ssid) newPassword=password;
     if(newPassword.length() && newPassword.length()<8) { server.send(400,"text/plain","Wi-Fi password must be at least 8 characters."); return; }
     photoBase=newPhoto; prefs.putString("photo_url",photoBase); photoAttempt[0]=0; photoRetryAt=0;
-    lvgl_port_lock(-1); ui::photosEnabled=!photoBase.isEmpty() && photoPixels; ui::photoReady=false; ui::photoView=false; lvgl_port_unlock();
+    lvgl_port_lock(-1); ui::photosEnabled=!photoBase.isEmpty() && photoPixels; ui::photoReady=false; lvgl_port_unlock();
     ssid=newSSID; password=newPassword; homeLat=lat; homeLon=lon; configured=true;
     prefs.putString("ssid",ssid); prefs.putString("pass",password); prefs.putDouble("lat",lat); prefs.putDouble("lon",lon); prefs.putBool("set",true);
     server.send(200,"text/html","<meta name='viewport' content='width=device-width'><h1>Settings saved</h1><p>The knob is connecting. If it cannot connect, setup remains available. Press the knob to view the radar.</p>");
@@ -216,13 +217,30 @@ void saveSetup() {
     lvgl_port_lock(-1); ui::model.reset(); ui::model.demo=false; ui::settings=false; lvgl_port_unlock();
     status("Connecting to Wi-Fi");
 }
+void updateSetupNetwork() {
+    const bool connected=WiFi.status()==WL_CONNECTED;
+    const String address=connected?WiFi.localIP().toString():WiFi.softAPIP().toString();
+    static String previousAddress,previousSSID;
+    static bool previousConnected=false;
+    if(address==previousAddress && ssid==previousSSID && connected==previousConnected) return;
+    previousAddress=address; previousSSID=ssid; previousConnected=connected;
+    lvgl_port_lock(-1);
+    ui::setupConnected=connected;
+    snprintf(ui::setupSSID,sizeof(ui::setupSSID),"%s",ssid.c_str());
+    snprintf(ui::setupAddress,sizeof(ui::setupAddress),"%s",address.c_str());
+    lvgl_port_unlock();
+}
+void startFallbackAP() {
+    if(apActive || WiFi.status()==WL_CONNECTED) return;
+    WiFi.mode(WIFI_AP_STA);
+    if(!WiFi.softAP("EchoScope-Setup",ui::setupPassword)) { status("Setup Wi-Fi failed"); return; }
+    dns.start(53,"*",WiFi.softAPIP()); apActive=true;
+    Serial.println("[network] Fallback AP enabled");
+}
 void openPortal() {
-    if(!portal) {
-        WiFi.mode(WIFI_AP_STA);
-        if(!WiFi.softAP("EchoScope-Setup",ui::setupPassword)) { status("Setup Wi-Fi failed"); return; }
-        dns.start(53,"*",WiFi.softAPIP()); portal=true;
-    }
-    portalStarted=millis();
+    startFallbackAP();
+    portal=true; portalStarted=millis();
+    updateSetupNetwork();
     lvgl_port_lock(-1); ui::settings=true; ui::setupOpeningTouch=ui::input.touching; ui::input.pending=false; lvgl_port_unlock();
 }
 // Keep remote text single-line and bounded, including HTML error pages.
@@ -283,7 +301,7 @@ void fetchPhoto() {
     char reg[16]{};
     lvgl_port_lock(-1);
     auto *selected=ui::model.selection();
-    if(ui::model.details && ui::photoView && selected) snprintf(reg,sizeof(reg),"%s",selected->registration);
+    if(ui::model.details && selected) snprintf(reg,sizeof(reg),"%s",selected->registration);
     lvgl_port_unlock();
     if(!reg[0]) return;
     for(char c:reg) { if(!c) break; if(!isalnum(static_cast<unsigned char>(c)) && c!='-') return; }
@@ -300,7 +318,7 @@ void fetchPhoto() {
         if(body.complete && sky::photoPacket(body.text.c_str(),body.text.length(),width,height)) {
             lvgl_port_lock(-1);
             auto *current=ui::model.selection();
-            if(!ui::asleep.load() && ui::model.details && ui::photoView && current && !strcmp(current->registration,reg)) {
+            if(!ui::asleep.load() && ui::model.details && current && !strcmp(current->registration,reg)) {
                 lv_img_cache_invalidate_src(&ui::photoImage);
                 memcpy(photoPixels,body.text.c_str()+sky::photoHeaderSize,width*height*2);
                 // Wire pixels are RGB565 big-endian, matching LV_COLOR_16_SWAP=1.
@@ -428,7 +446,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("EchoScope 0.3.1 / five-second setup hold and timeout fix");
+    Serial.println("EchoScope 0.3.2 / LAN setup and combined photo details");
     Serial.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
@@ -488,20 +506,27 @@ void loop() {
     if(requestPortal.exchange(false)) openPortal();
     const uint32_t now=millis();
     if(ui::requestFeed.exchange(false)) nextFetch=now;
-    server.handleClient(); if(portal) dns.processNextRequest();
+    const bool connected=WiFi.status()==WL_CONNECTED;
+    if(connected && apActive) {
+        dns.stop(); WiFi.softAPdisconnect(true); WiFi.mode(WIFI_STA); apActive=false;
+        Serial.println("[network] Connected to configured Wi-Fi; fallback AP disabled");
+    }
+    if(networkPolicy.fallback(configured,connected,now) && !apActive) openPortal();
+    updateSetupNetwork();
+    if(connected && portal && sky::setupExpired(millis(),portalStarted)) {
+        portal=false; lvgl_port_lock(-1); ui::settings=false; lvgl_port_unlock();
+    }
+    server.handleClient(); if(apActive) dns.processNextRequest();
     if(ui::asleep.load()) { delay(20); return; }
     if(!configured) {
         static uint32_t lastDemo=0;
         if(uint32_t(now-lastDemo)>1000) { demoFrame(now); lastDemo=now; }
     } else if(WiFi.status()==WL_CONNECTED) {
-        if(portal && sky::setupExpired(millis(),portalStarted)) { dns.stop(); WiFi.softAPdisconnect(true); portal=false; lvgl_port_lock(-1); ui::settings=false; lvgl_port_unlock(); }
         if(int32_t(now-nextFetch)>=0) fetch();
         else fetchPhoto();
     } else {
         status("Wi-Fi disconnected");
         if(int32_t(now-nextReconnect)>=0) { WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=now+20000; }
-        // Keep credentials; automatically make recovery available after a failed connection.
-        if(!portal && now>30000) openPortal();
     }
     delay(5);
 }

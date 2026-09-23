@@ -92,3 +92,7 @@ Host photo tests cover valid/invalid LAN URLs, dimensions, truncation, bounded c
 ## Version 0.3.1 — setup timeout and five-second hold
 
 Regression tests cover a loop timestamp one millisecond earlier than portalStarted (previously unsigned subtraction expired setup immediately), the exact five-minute boundary and millis rollover. Button tests verify no setup hold at the old threshold, one hold event at five seconds, and long-press classification on release. Setup entry also clears pending clicks and suppresses a short-touch release originating from the opening gesture. Existing model/input/JSON/photo tests and the ESP32-S3 build/image packaging passed. Physical confirmation of menu persistence is pending.
+
+## Version 0.3.2 — LAN setup and combined photo details
+
+Host model/input, JSON and photo-protocol tests passed. New network-policy tests cover first-boot fallback, the 30-second connection grace period, immediate suppression while connected, subsequent disconnect/recovery and millis rollover. Native LVGL combined-photo and missing-photo previews were inspected, and tap-to-radar assertions passed; connected setup was also previewed. The fallback preview retained the known native harness omission of some unchanged labels, so physical display verification remains necessary. The ESP32-S3 release build and image packaging passed: 1,667,524 application bytes, 72,636 static RAM bytes. No device flashing was performed. Actual AP shutdown/recovery and LAN configuration access require an on-device check. Docker service code and protocol are unchanged.

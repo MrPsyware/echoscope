@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+- Show the configured Wi-Fi SSID and LAN IP in setup when connected; disable the fallback access point as soon as Wi-Fi connects.
+- Start recovery Wi-Fi after 30 seconds disconnected, or when manually opening setup while offline.
+- Combine aircraft photos and flight telemetry on one details page, keeping photo attribution and position age while removing bottom control hints.
+
 ## 0.3.1
 
 - Fix setup immediately expiring when the loop timestamp predates the portal opening time.

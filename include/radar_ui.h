@@ -12,12 +12,13 @@ inline lv_obj_t *canvas;
 inline sky::Model model;
 inline sky::InputGate input;
 inline sky::Activity activity;
-inline bool photosEnabled=false,photoView=false,photoReady=false;
+inline bool photosEnabled=false,photoReady=false;
 inline char photoReg[16]{},photoCredit[128]{},photoLink[256]{},photoStatus[48]="Loading photo...";
 inline lv_img_dsc_t photoImage{};
 inline std::atomic<bool> asleep{false};
 inline int footerSplitX=centre;
-inline bool settings=false,setupOpeningTouch=false;
+inline bool settings=false,setupOpeningTouch=false,setupConnected=false;
+inline char setupSSID[33]{};
 inline std::atomic<bool> requestFeed{false};
 inline char status[80]="Starting", setupPassword[20]="", setupAddress[24]="192.168.4.1";
 inline void line(int x,int y,int x2,int y2,uint32_t color,int width=1,lv_opa_t opacity=LV_OPA_COVER) {
@@ -66,11 +67,15 @@ inline void render(uint32_t now) {
     lv_canvas_fill_bg(canvas,lv_color_hex(0x030D10),LV_OPA_COVER);
     if(settings) {
         text(70,"SETUP",&lv_font_montserrat_28,green);
-        text(126,"Join Wi-Fi network",&lv_font_montserrat_18,muted);
-        text(155,"EchoScope-Setup",&lv_font_montserrat_24);
-        text(204,"Wi-Fi password",&lv_font_montserrat_16,muted);
-        text(229,setupPassword,&lv_font_montserrat_24);
-        text(279,"Then open in your browser",&lv_font_montserrat_16,muted);
+        text(126,setupConnected?"Connected to Wi-Fi":"Join Wi-Fi network",&lv_font_montserrat_18,muted);
+        text(155,setupConnected?setupSSID:"EchoScope-Setup",&lv_font_montserrat_20,white,63,340);
+        if(setupConnected) {
+            text(229,"Setup access point is off",&lv_font_montserrat_16,muted);
+        } else {
+            text(204,"Wi-Fi password",&lv_font_montserrat_16,muted);
+            text(229,setupPassword,&lv_font_montserrat_24);
+        }
+        text(279,"Open in your browser",&lv_font_montserrat_16,muted);
         text(306,setupAddress,&lv_font_montserrat_22,green);
         text(370,"Press or tap to return",&lv_font_montserrat_16,muted);
         return;
@@ -86,32 +91,43 @@ inline void render(uint32_t now) {
             text(250,"Turn to select another flight",&lv_font_montserrat_18,muted);
         } else {
             char s[80];
-            text(64,a->callsign[0]?a->callsign:a->hex,&lv_font_montserrat_36);
+            text(photosEnabled?44:64,a->callsign[0]?a->callsign:a->hex,&lv_font_montserrat_36);
             std::snprintf(s,sizeof(s),"%s  /  %s",a->registration[0]?a->registration:"--",a->type[0]?a->type:"--");
-            text(109,s,&lv_font_montserrat_20,muted);
-            if(photosEnabled && photoView) {
+            text(photosEnabled?88:109,s,&lv_font_montserrat_20,muted);
+            if(photosEnabled) {
+                // Photo and live telemetry share one page; retain attribution and age.
+                text(116,a->description[0]?a->description:"Aircraft model unavailable",&lv_font_montserrat_14,white,63,340);
                 if(photoReady && !std::strcmp(photoReg,a->registration)) {
                     lv_draw_img_dsc_t d; lv_draw_img_dsc_init(&d);
-                    lv_canvas_draw_img(canvas,(size-photoImage.header.w)/2,144,&photoImage,&d);
-                    char credit[150]; snprintf(credit,sizeof(credit),"Copyright %s",photoCredit);
-                    text(302,credit,&lv_font_montserrat_14,muted,73,320);
-                    text(350,"Planespotters.net",&lv_font_montserrat_14,muted);
+                    lv_canvas_draw_img(canvas,(size-photoImage.header.w)/2,151,&photoImage,&d);
+                    char credit[170]; snprintf(credit,sizeof(credit),"Copyright %s / Planespotters.net",photoCredit);
+                    lv_draw_label_dsc_t label; lv_draw_label_dsc_init(&label);
+                    label.color=lv_color_hex(muted); label.font=&lv_font_montserrat_14; label.align=LV_TEXT_ALIGN_CENTER;
+                    // Shrink unusually long credits to fit the reserved two lines.
+                    lv_point_t bounds; lv_txt_get_size(&bounds,credit,label.font,0,0,360,LV_TEXT_FLAG_NONE);
+                    if(bounds.y>34) label.font=&lv_font_montserrat_12;
+                    lv_canvas_draw_text(canvas,53,305,360,&label,credit);
                 } else text(210,!a->registration[0]?"No registration available":photoStatus,&lv_font_montserrat_18,muted);
-                text(382,"PRESS / TAP: FLIGHT DETAILS",&lv_font_montserrat_14,green);
-                text(406,"Photo link: device web page /photo",&lv_font_montserrat_14,muted);
+                char alt[16],speed[16],track[16];
+                auto value=[](char *out,size_t n,float v) { if(std::isfinite(v)) snprintf(out,n,"%.0f",v); else snprintf(out,n,"--"); };
+                value(alt,sizeof(alt),a->altitude); value(speed,sizeof(speed),a->speed); value(track,sizeof(track),a->track);
+                snprintf(s,sizeof(s),"%s ft   /   %s kt",alt,speed);
+                text(347,s,&lv_font_montserrat_20);
+                snprintf(s,sizeof(s),"%.1f km / %.0f deg   Track %s",sky::distance(a->position),sky::bearing(a->position),track);
+                text(375,s,&lv_font_montserrat_16,green);
+                snprintf(s,sizeof(s),"%sPosition %.0fs old",a->military?"MILITARY / ":"",sky::age(*a,now));
+                text(401,s,&lv_font_montserrat_14,sky::age(*a,now)>20?amber:muted);
+                text(426,"Data: adsb.fi",&lv_font_montserrat_14,muted);
                 return;
             }
             text(144,a->description[0]?a->description:"Aircraft model unavailable",&lv_font_montserrat_16,white,63,340);
-            if(photosEnabled) text(185,a->military?"MILITARY   /   PHOTO >":"PHOTO >",&lv_font_montserrat_14,amber);
-            else if(a->military) text(185,"MILITARY",&lv_font_montserrat_14,amber);
+            if(a->military) text(185,"MILITARY",&lv_font_montserrat_14,amber);
             std::snprintf(s,sizeof(s),"%.1f km  /  %.0f deg",sky::distance(a->position),sky::bearing(a->position));
             text(209,s,&lv_font_montserrat_24,green);
             metric(248,"ALT",a->altitude,"ft"); metric(279,"SPEED",a->speed,"kt"); metric(310,"TRACK",a->track,"deg");
             std::snprintf(s,sizeof(s),"Position %.0fs old",sky::age(*a,now));
             text(350,s,&lv_font_montserrat_16,sky::age(*a,now)>20?amber:muted);
         }
-        text(383,"TURN: FLIGHTS",&lv_font_montserrat_14,muted);
-        text(402,"PRESS / TAP: RADAR",&lv_font_montserrat_14,green);
         text(426,"Data: adsb.fi",&lv_font_montserrat_14,muted);
         return;
     }
@@ -193,15 +209,13 @@ inline void render(uint32_t now) {
 inline void tap(int x,int y,uint32_t now) {
     if(settings) { settings=false; return; }
     if(model.details) {
-        if(photoView) { photoView=false; return; }
-        if(photosEnabled && y>=175 && y<=207) { photoView=true; return; }
         model.details=false; model.refresh(now); return;
     }
     if(y>=20 && y<67 && x>=128 && x<=338) { if(activity.tapFilter(now)) { model.cycleFilter(now); requestFeed=true; } return; }
     if(y>=415) { model.selectMode=x>=footerSplitX; model.refresh(now); return; }
     float east=(x-centre)*model.range()/radius, north=(centre-y)*model.range()/radius;
     int i=model.hit(east,north,25*model.range()/radius,now);
-    if(i>=0) { model.select(i); model.details=true; photoView=false; }
+    if(i>=0) { model.select(i); model.details=true; }
     else model.openSelected(now);
 }
 }

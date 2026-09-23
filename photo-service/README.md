@@ -40,7 +40,7 @@ Stop it with `docker compose down`. There are no persistent data volumes.
 4. Enter `http://YOUR-DOCKER-SERVER-IP:8086` in **Photo service URL**.
    Do not use localhost: that would refer to the knob itself.
 5. Choose **Test connection**, then save. Blank disables photos.
-6. Open an aircraft's details and tap **PHOTO >**. Press or tap to return to details.
+6. Open an aircraft's details: its photo loads alongside flight information. Press or tap to return to radar.
 
 The connection test verifies the service/protocol, not upstream availability.
 Missing registrations or missing photos show an unavailable message. Opening
