@@ -2,6 +2,7 @@
 SHELL := /bin/bash
 
 PYTHON ?= python3
+DOCKER ?= docker
 PORT ?= /dev/ttyACM0
 BAUD ?= 115200
 ENV ?= echoscope
@@ -13,7 +14,7 @@ export PLATFORMIO_CORE_DIR
 export PLATFORMIO_SETTING_ENABLE_TELEMETRY := false
 export PIP_DISABLE_PIP_VERSION_CHECK := 1
 
-.PHONY: help setup deps build test firmware upload flash flash-full monitor ports backup clean
+.PHONY: help setup deps build test firmware upload flash flash-full monitor ports backup clean docker docker-down docker-logs
 help:
 	@printf '%s\n' \
 	  'EchoScope build commands:' \
@@ -27,6 +28,9 @@ help:
 	  '  make monitor     Open the serial monitor; quit with Ctrl+C' \
 	  '  make ports       List available serial devices' \
 	  '  make backup      Save a timestamped 16 MB backup under .backups/' \
+	  '  make docker      Build/start the photo service on 0.0.0.0:8086' \
+	  '  make docker-down Stop the photo service' \
+	  '  make docker-logs Follow photo service logs' \
 	  '  make clean       Remove build products, retaining tools and backups' \
 	  'Override serial device with PORT=/dev/ttyACM1; monitor baud with BAUD=115200.'
 
@@ -46,6 +50,8 @@ test: deps
 	.tools/tests/model_test
 	$(CXX) -std=c++17 -Wall -Wextra -Werror -I include -I ".pio/libdeps/$(ENV)/ArduinoJson/src" tests/json_test.cpp -o .tools/tests/json_test
 	.tools/tests/json_test
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -I include tests/photo_test.cpp -o .tools/tests/photo_test
+	.tools/tests/photo_test
 firmware: build
 	"$(PY)" scripts/package_firmware.py --environment "$(ENV)"
 upload: flash
@@ -62,3 +68,10 @@ backup: setup
 	"$(PY)" -m esptool --chip esp32s3 --port "$(PORT)" read_flash 0x0 0x1000000 ".backups/esp32s3-$$(date +%Y%m%d-%H%M%S).bin"
 clean:
 	$(PYTHON) scripts/clean.py
+
+docker:
+	$(DOCKER) compose -f photo-service/compose.yaml up -d --build
+docker-down:
+	$(DOCKER) compose -f photo-service/compose.yaml down
+docker-logs:
+	$(DOCKER) compose -f photo-service/compose.yaml logs -f

@@ -143,3 +143,37 @@ A vintage radar-station-style 3D-printed enclosure is planned. CAD/STL files and
 This is a new application inspired by [MatixYo/ESP32-Plane-Radar](https://github.com/MatixYo/ESP32-Plane-Radar). Hardware support comes from the [VIEWE examples](https://github.com/VIEWESMART/UEDX46460015-MD50ESP32-1.5inch-Touch-Knob-Display) and Espressif libraries.
 
 Original application code is MIT licensed. See [LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PARTY.md) for component attribution and licences.
+
+### Feed diagnostics
+
+Run `make monitor PORT=/dev/ttyACM0` to see each request's HTTP status, response byte count (`-1` means unknown advertised length), read timing, parsed/retained aircraft counts and retry delay. Failures also report the exact ArduinoJson decoder error or missing `ac` array, incomplete-body reason, selected response headers (including `Retry-After` and `CF-Ray` when present), memory and Wi-Fi state, and at most 240 characters of the response prefix. Remote text is flattened to printable single-line text. Error-body reads are limited to 1 KiB/one second; successful-response reads to 512 KiB/eight seconds. Repeated failures are logged even when the screen status has not changed.
+
+Capture the complete `[feed]` block around a failure to distinguish an API error page, rate limit, truncated transfer or memory issue. A prefix can contain aircraft positions returned by the public feed. The radar zoom changes the display only; requests always use the saved home latitude/longitude and `/dist/54`.
+
+Version 0.2.5 also logs the approximate zero-based parser stopping offset, a 200-character context window, up to 33 hexadecimal bytes around the stop, and the last 200 response characters. Capture these lines with the failure headers. For a response without Content-Length, `transport ended=yes` only means the connection closed; JSON parsing must still succeed.
+
+Version 0.2.6 fixes large-response corruption in the pinned Arduino core by accumulating response bytes in a fixed-capacity PSRAM buffer instead of growing an Arduino String. The successful-response buffer is 512 KiB, freed after each request. JSON failure diagnostics remain enabled.
+
+Version 0.2.7 samples the mechanical button in a separate task every roughly 5 ms, with 30 ms debounce, so a radar render cannot hide a short press. Timestamped button events are handled by the UI; touch overlap suppression and the 1.5-second setup hold remain. Serial `[input]` lines show releases, touch overlap and accepted clicks.
+
+### Aircraft classes and filters (0.2.8)
+
+Tap the top radar label to cycle **All → Military → Rotorcraft**. Filtering applies to symbols, trails, hit testing and knob selection. A new feed request refills the nearest 64 matching aircraft; the display can be empty briefly while it arrives. Military is the database flag (`dbFlags & 1`), not an inference from callsign or tracking source. Missing tags do not prove civilian status.
+
+Aircraft use light/large fixed-wing or rotorcraft symbols when classified; unknown classes use a diamond. Classification uses emitter category with a small model-code fallback for common rotorcraft. The independent **M** badge marks military-tagged aircraft. Selected symbols and trails stay orange. Full model descriptions appear on the details screen when supplied.
+
+The radar radius is now 200 pixels (previously 182). Normal live operation has no persistent status banner; stale/error messages remain and adsb.fi attribution appears on the details screen.
+
+### Auto-hide and standby (0.2.9)
+
+After 10 seconds without touching the screen, the filter disappears and reveals the north marker. Its touch area stays at the top: the first tap reveals the current filter; later taps cycle it. Touching the screen extends its visible period, while turning/pressing the knob does not reveal a hidden filter.
+
+After one hour without touch, press or rotation, the panel turns off and radar rendering and new HTTP feed requests pause. An already-running request may finish. Touch/knob sensing and Wi-Fi remain active; this is display standby, not ESP32 deep sleep. The first interaction wakes the display without changing settings or selection, and requests fresh aircraft data. Serial `[power]` messages mark sleep and wake.
+
+### Optional aircraft photos (0.3.0)
+
+The [photo service](photo-service/README.md) runs in Docker on another LAN computer. Start it with `make docker` from the repository root (listens on `0.0.0.0:8086`), then hold the knob for 1.5 seconds to unlock its web setup. Enter `http://YOUR-SERVER-IP:8086` in **Photo service URL**, test and save. Leaving it blank disables photos.
+
+On aircraft details, tap **PHOTO >** to request the actual aircraft's thumbnail by registration. Tap or press to return to flight details. Photos retain photographer credit; open `http://KNOB-IP/photo` for the original-photo link. The service does not store photographs on disk. Missing photos and unavailable servers leave the radar usable. New photo requests pause during standby, and obsolete responses are discarded. The firmware accepts only the bounded image protocol; it does not decode JPEGs. See the service README for deployment, provider and protocol details.
+
+The radar radius is now 210 pixels.

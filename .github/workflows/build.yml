@@ -26,3 +26,15 @@ jobs:
         with:
           name: echoscope-firmware
           path: dist/
+
+  photo-service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r photo-service/requirements.txt
+      - run: python -m unittest -v test_service
+        working-directory: photo-service
+      - run: docker build -t echoscope-photos:test photo-service

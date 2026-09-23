@@ -58,3 +58,33 @@ Selected history is drawn in amber at two pixels/140 alpha, after unselected his
 ## Version 0.2.3 — EchoScope build tooling
 
 Fresh local Python environment setup passed with pinned PlatformIO 6.2.0 and esptool 4.8.1. `make test` passed model/input and JSON tests. `make firmware` built the renamed ESP32-S3 project and validated the generated application partition at 0x10000 before merging images. Builds reused an existing downloaded PlatformIO toolchain cache through the supported PLATFORMIO_CORE_DIR override. Clean-target testing confirmed tools, library downloads and backups remain. Flash-target dry runs confirmed PORT overrides and correct app/full-image offsets; no device was flashed. GitHub Actions uses a fresh default local cache.
+
+## Version 0.2.4 — feed diagnostics
+
+Existing model/input and JSON host tests passed. Final ESP32-S3 firmware build, app/merged image packaging and checksum verification passed. Reviewed the body reader against the installed HTTPClient API, including its nullable stream pointer after disconnection. Reads now stop explicitly on timeout, size limit, allocation failure or premature connection closure, with bounded printable response samples. The device has not been flashed and intermittent API/network failures have not been reproduced; field logs are still needed to identify their cause.
+
+## Version 0.2.5 — JSON failure location
+
+A fresh HTTP/1.0 response from the configured example endpoint contained 119,361 bytes and 223 aircraft; both Python's decoder and the production filtered ArduinoJson decoder accepted it. This does not reproduce or explain the user's earlier 99,205-byte InvalidInput response. Added tested counting-reader diagnostics: valid filtered data, exact stopping location for an invalid character, truncated input and empty input. Existing host tests and the ESP32-S3 firmware/image packaging build passed. Device failure reproduction and physical validation remain pending.
+
+## Version 0.2.6 — large-response buffer fix
+
+Inspection of the pinned Arduino 3.1.1 WString.cpp found changeBuffer stores the prior length in uint16_t before reallocating, allowing appends beyond 65,535 bytes to overwrite earlier response bytes. Its concat implementation also copies length+1 bytes from receive chunks that were not NUL terminated. Replaced the body with a fixed-capacity PSRAM buffer using exact-length memcpy. Regression tests append and decode a 140 KB JSON document in non-terminated 371-byte allocations, verify every byte and terminator, reject capacity overflow, and handle allocation failure. Existing host tests passed; JSON/buffer tests also passed AddressSanitizer and UndefinedBehaviorSanitizer (leak checking disabled for the sandbox). ESP32-S3 firmware and image packaging passed. The observed field response is consistent with the core defect; confirmation on the physical device is pending.
+
+## Version 0.2.7 — mechanical button sampling
+
+Moved GPIO0 sampling/debounce out of the LVGL timer into a periodic task on core 0, queuing timestamped down/up/hold events for UI-thread processing. The prior nominal 10 ms LVGL polling could pause for a full radar render and miss a short press. Tests cover contact bounce, a press captured during a 140 ms UI pause, single long-hold emission, timer rollover and touch callbacks processed ahead of queued button timestamps. Existing model and JSON tests and the final ESP32-S3 build/image packaging passed. Physical click reliability awaits user confirmation; serial input diagnostics distinguish accepted clicks from touch/long-press suppression.
+
+## Version 0.2.8 — aircraft classes and larger radar
+
+Model tests passed for filter cycling, visible selection and exclusion from hit testing. JSON tests passed for production-filter preservation of description/category/dbFlags, military bitmask combinations, rotorcraft classification/fallback, and military filtering before the nearest-64 cap. Existing input, trail and buffer tests passed. The ESP32-S3 build/package passed (1,643,368 application bytes, 71,868 static RAM bytes). Native LVGL first-frame radar and military-details previews were inspected, and touch/filter/footer navigation assertions passed. Repeated native harness frames had missing draw elements, so preview inspection was limited to fresh first frames; on-device rendering/performance and classification confirmation remain pending. Firmware retains all runtime diagnostics.
+
+## Version 0.2.9 — filter timeout and standby
+
+Host tests passed for 10-second hide, first-tap reveal, subsequent cycling, touch timeout extension, the exact one-hour idle threshold, one-shot sleep/wake, held-input exclusion and timer rollover. Native LVGL first-frame hidden-filter preview was inspected and top-target interaction assertions passed. Existing model/input/JSON tests and the final ESP32-S3 firmware/image packaging passed. Sleep uses the board LCD display-on/off API; the board has no separate backlight. Rendering and new feed requests are gated while asleep, while input sampling remains active. Physical display off/on and an hour-long on-device soak have not been tested; an in-flight HTTP request may complete after sleep begins.
+
+## Version 0.3.0 — optional photo service and LAN configuration
+
+Docker image built with Python 3.12/Pillow 12.1.1. Four service tests passed for image dimensions/RGB565 byte order and attribution, host restrictions, missing-photo caching and invalid-image rejection. `make docker` was exercised with an isolated Compose project and alternate host port; Docker reported HostIp 0.0.0.0. The service health endpoint and a real G-UZHO lookup returned a valid 200×135 image packet (54,392 bytes), photographer Ewan Partridge and the matching Planespotters source link. `make docker-down` removed the verification service; the earlier smoke container was also stopped. Compose configuration validation passed.
+
+Host photo tests cover valid/invalid LAN URLs, dimensions, truncation, bounded credits and provider source links. Model/input/JSON regression tests passed. Native first-frame photo rendering using the real service packet confirmed correct colours and readable attribution; photo/details navigation assertions passed. The larger 210-pixel radar preview was inspected. Physical display/configuration testing is pending. No API credentials or photographs are included in the repository. The setup page still requires the existing 1.5-second physical hold to unlock; the new connection test verifies service identity/protocol. Tests and packaging for the final firmware build are recorded in work/echoscope-030-verified.log.

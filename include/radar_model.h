@@ -36,12 +36,17 @@ inline bool clipToCircle(Point &a,Point &b,float radius) {
     a={start.east+lo*d.east,start.north+lo*d.north};
     b={start.east+hi*d.east,start.north+hi*d.north}; return true;
 }
+enum class Filter { All, Military, Rotorcraft };
+enum class AircraftKind { Unknown, Light, Large, Rotorcraft };
 struct Aircraft {
-    char hex[12]{}, callsign[16]{}, registration[16]{}, type[12]{};
+    char hex[12]{}, callsign[16]{}, registration[16]{}, type[12]{}, description[80]{};
+    AircraftKind kind=AircraftKind::Unknown;
+    bool military=false;
     Point position;
     float altitude = NAN, speed = NAN, track = NAN, verticalRate = NAN, positionAge = 0;
     uint32_t received = 0;
 };
+inline bool matches(const Aircraft &a,Filter filter) { return filter==Filter::All || (filter==Filter::Military?a.military:a.kind==AircraftKind::Rotorcraft); }
 struct Snapshot { std::array<Aircraft,maxAircraft> aircraft{}; size_t count = 0; };
 inline float age(const Aircraft &a,uint32_t now) { return a.positionAge + uint32_t(now-a.received)/1000.0f; }
 // Histories live separately from feed snapshots; the device allocates these in
@@ -75,6 +80,7 @@ struct Model {
     Trail *trails=nullptr;
     char selected[12]{};
     int rangeIndex = 2;
+    Filter filter=Filter::All;
     bool selectMode = false;
     bool details = false;
     bool demo = true;
@@ -82,11 +88,11 @@ struct Model {
     uint32_t lastUpdate = 0;
     float range() const { return ranges[rangeIndex]; }
     void reset() {
-        data.count=0; selected[0]=0; rangeIndex=2; selectMode=false;
+        data.count=0; selected[0]=0; rangeIndex=2; filter=Filter::All; selectMode=false;
         details=false; demo=true; hasUpdate=false; lastUpdate=0;
         if(trails) for(size_t i=0;i<maxAircraft;++i) trails[i].clear();
     }
-    bool visible(const Aircraft &a,uint32_t now) const { return distance(a.position)<=range() && age(a,now)<=60; }
+    bool visible(const Aircraft &a,uint32_t now) const { return matches(a,filter) && distance(a.position)<=range() && age(a,now)<=60; }
     Aircraft *selection() {
         for(size_t i=0;i<data.count;++i) if(!std::strcmp(data.aircraft[i].hex,selected)) return &data.aircraft[i];
         return nullptr;
@@ -143,6 +149,7 @@ struct Model {
         else idx=((idx+delta)%count+count)%count;
         select(choices[idx]);
     }
+    void cycleFilter(uint32_t now) { filter=Filter((int(filter)+1)%3); details=false; refresh(now); }
     void press(uint32_t now) {
         if(details) { details=false; refresh(now); return; }
         selectMode=!selectMode; refresh(now);
@@ -155,7 +162,7 @@ struct Model {
         int best=-1; float nearest=tolerance;
         for(size_t i=0;i<data.count;++i) {
             const auto &a=data.aircraft[i];
-            if(age(a,now)>60 || distance(a.position)>range()) continue;
+            if(!visible(a,now)) continue;
             float d=distance({a.position.east-east,a.position.north-north});
             if(d<nearest) { nearest=d; best=int(i); }
         }

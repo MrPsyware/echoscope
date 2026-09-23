@@ -9,7 +9,10 @@ struct InputGate {
     void touchBegin(uint32_t now) { touching=true; seenTouch=true; lastTouch=now; pending=false; if(buttonHeld) touchedDuringPress=true; }
     void touchEnd(uint32_t now) { touching=false; seenTouch=true; lastTouch=now; pending=false; }
     void buttonBegin(uint32_t now) {
-        buttonHeld=true; touchedDuringPress=touching || (seenTouch && uint32_t(now-lastTouch)<180); pending=false;
+        // Queued button timestamps can precede a touch callback already handled
+        // by LVGL after a slow frame. Count nearby touches in either direction.
+        const int32_t touchDelta=static_cast<int32_t>(now-lastTouch);
+        buttonHeld=true; touchedDuringPress=touching || (seenTouch && touchDelta>-180 && touchDelta<180); pending=false;
     }
     void buttonEnd(uint32_t now,bool longPress) {
         buttonHeld=false; pending=!longPress && !touchedDuringPress && !touching; releasedAt=now;

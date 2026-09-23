@@ -1,5 +1,7 @@
 #include "radar_model.h"
 #include "input_gate.h"
+#include "activity.h"
+#include "button_debounce.h"
 #include <cassert>
 #include <iostream>
 int main() {
@@ -39,6 +41,52 @@ int main() {
     Point a={-20,0},b={20,0}; assert(clipToCircle(a,b,10) && a.east==-10 && b.east==10);
     a={20,20}; b={30,30}; assert(!clipToCircle(a,b,10));
     m.reset(); assert(m.trails==trails.data() && !m.selectMode && !m.data.count);
+    Activity idle;
+    assert(!idle.tick(9999) && idle.filterVisible);
+    assert(!idle.tick(10000) && !idle.filterVisible);
+    assert(!idle.tapFilter(10001) && idle.filterVisible);
+    assert(idle.tapFilter(10002));
+    idle.interact(15000,true); idle.tick(24999); assert(idle.filterVisible);
+    idle.tick(25000); assert(!idle.filterVisible);
+    assert(!idle.tick(3614999)); assert(idle.tick(3615000) && idle.sleeping);
+    assert(!idle.tick(3615001)); assert(idle.interact(3615100) && !idle.sleeping);
+    assert(!idle.interact(3615200));
+    idle.lastActivity=UINT32_MAX-100; assert(!idle.tick(100));
+    idle.interact(0); assert(!idle.tick(Activity::sleepTimeout,true));
+    Model filtered; filtered.data.count=2;
+    strcpy(filtered.data.aircraft[0].hex,"civil"); filtered.data.aircraft[0].position={1,0};
+    strcpy(filtered.data.aircraft[1].hex,"mil"); filtered.data.aircraft[1].position={2,0};
+    filtered.data.aircraft[1].military=true;
+    filtered.cycleFilter(0); assert(filtered.filter==Filter::Military);
+    assert(!strcmp(filtered.selected,"mil")); assert(filtered.hit(1,0,0.2f,0)==-1);
+    filtered.selectMode=true; filtered.rotate(1,0); assert(!strcmp(filtered.selected,"mil"));
+    filtered.cycleFilter(0); assert(!filtered.selected[0]);
+    filtered.cycleFilter(0); assert(!strcmp(filtered.selected,"civil"));
+    // Capture a complete short press while the UI is blocked for a 140 ms render.
+    ButtonDebounce button;
+    assert(button.sample(true,100)==ButtonDebounce::None);
+    assert(button.sample(false,105)==ButtonDebounce::None); // contact bounce
+    assert(button.sample(true,110)==ButtonDebounce::None);
+    assert(button.sample(true,140)==ButtonDebounce::Down);
+    assert(button.sample(false,180)==ButtonDebounce::None);
+    assert(button.sample(false,210)==ButtonDebounce::Up);
+    InputGate delayed;
+    delayed.buttonBegin(140); delayed.buttonEnd(210,button.longSent);
+    assert(delayed.takeClick(390) && !delayed.takeClick(400));
+    assert(button.sample(true,1000)==ButtonDebounce::None);
+    assert(button.sample(true,1030)==ButtonDebounce::Down);
+    assert(button.sample(true,2529)==ButtonDebounce::None);
+    assert(button.sample(true,2530)==ButtonDebounce::Hold);
+    assert(button.sample(true,2600)==ButtonDebounce::None);
+    assert(button.sample(false,2700)==ButtonDebounce::None);
+    assert(button.sample(false,2730)==ButtonDebounce::Up && button.longSent);
+    ButtonDebounce rollover;
+    assert(rollover.sample(true,UINT32_MAX-10)==ButtonDebounce::None);
+    assert(rollover.sample(true,20)==ButtonDebounce::Down);
+    InputGate touchFirst;
+    touchFirst.touchBegin(220); touchFirst.touchEnd(230);
+    touchFirst.buttonBegin(140); touchFirst.buttonEnd(210,false);
+    assert(!touchFirst.takeClick(500)); // touch callbacks before delayed button queue
     InputGate gate; gate.buttonBegin(1000); gate.buttonEnd(1100,false);
     assert(!gate.takeClick(1200) && gate.takeClick(1280) && !gate.takeClick(1300));
     gate.touchBegin(2000); gate.buttonBegin(2010); gate.buttonEnd(2100,false); gate.touchEnd(2110);

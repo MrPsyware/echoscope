@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.3.0
+
+- Add an optional Docker photo service using Planespotters thumbnails, bounded in-memory caching and display-ready RGB565 packets with attribution.
+- Save the photo service LAN URL in protected setup, with a connection test and blank-to-disable option.
+- Add an on-demand PHOTO view, credit/source-link page, error fallback, standby gating and stale-selection rejection.
+- Increase radar radius from 200 to 210 pixels.
+
+## 0.2.9
+
+- Hide the filter after 10 seconds without touch; the invisible target reveals it on the first tap and cycles on subsequent taps.
+- Move the north marker to the top of the radar.
+- After one hour without interaction, turn the display off and pause rendering/feed requests; consume the first touch, button gesture or rotation to wake and refresh.
+
+## 0.2.8
+
+- Add aircraft class silhouettes, independent military badges and model descriptions.
+- Tap the top filter to cycle All / Military / Rotorcraft; filter before the nearest-64 limit and request fresh data.
+- Increase radar radius from 182 to 200 pixels and move persistent adsb.fi attribution to details.
+- Retain stale-feed warnings, orange selection/trails and existing knob controls.
+
+## 0.2.7
+
+- Sample and debounce the mechanical button independently of slow radar rendering; queue timestamped down/up/hold events for the UI.
+- Retain touch overlap suppression and the setup long press; add serial logs for releases and accepted clicks.
+- Test short presses, contact bounce, long holds and timer rollover.
+
+## 0.2.6
+
+- Replace response String growth with a bounded PSRAM byte buffer, avoiding Arduino 3.1.1 length truncation above 65,535 bytes.
+- Copy exactly the received bytes; avoid the pinned String concat implementation reading one byte beyond unterminated chunks.
+- Test large chunked appends, exact capacity, allocation failure and filtered decoding above 64 KiB.
+
+## 0.2.5
+
+- Report the JSON parser stopping offset, nearby printable and hexadecimal bytes, and response tail on decode failures.
+- Clarify that connection closure without Content-Length is transport completion, not proof of a complete JSON document.
+- Exercise the production filtered decoder and error offsets in host tests.
+
+## 0.2.4
+
+- Log each feed failure with HTTP status, response headers, bounded response prefix, timing, Wi-Fi and memory state, and retry delay.
+- Distinguish JSON decoder errors, missing aircraft arrays, interrupted responses, read timeouts, body size limits and allocation failures.
+- Log successful response sizes and parsed/retained aircraft counts.
+
 ## 0.2.3 — EchoScope
 
 - Rename the application and setup network to EchoScope; retain existing settings storage.
