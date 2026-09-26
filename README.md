@@ -192,7 +192,7 @@ Hold for five seconds and open the displayed setup address to configure:
 - **Watchlists:** comma/space-separated types, registrations and callsigns, up to 16 entries per field. Matching ignores case; a trailing `*` matches a prefix (`B74*`, `RCH*`). `A380` also matches the ICAO `A388` code. Other type entries use feed type codes.
 - **Military/helicopter watches:** optional category switches; classifications depend on the feed's metadata.
 
-Visible watch matches have a small green ring. A bold outer ring pulses while any matching aircraft has a position no older than 20 seconds. Alerts respect the selected range and filters, stop when positions age or leave coverage, and never trigger for demo data. Watch matches receive priority when retaining the nearest 64 matching aircraft. Monitoring pauses during sleep; alerts do not wake the screen. Saved watch rules and display settings survive reboot. Flight details still open by touch and return with a click/tap.
+Visible watch matches have a small category-coloured ring. The configurable outer ring activates while any matching aircraft has a position no older than 20 seconds. Alerts respect the selected range and filters, stop when positions age or leave coverage, and never trigger for demo data. Watch matches receive priority when retaining the nearest 64 matching aircraft. Monitoring pauses during sleep; alerts do not wake the screen. Saved watch rules and display settings survive reboot. Flight details still open by touch and return with a click/tap.
 
 Satellite tracking is not included: it would require a separate orbital feed and position calculations, rather than the adsb.fi aircraft feed.
 
@@ -213,3 +213,17 @@ Upload builds the application, verifies the target protocol and available partit
 Network monitoring is read-only and does not need setup unlocked. It replays up to 8 KiB of recent application diagnostics, then polls for new logs; it reconnects after Wi-Fi loss/reboot and reports overwritten log data. Feed, TLS, input, power and display diagnostics are included. ROM/bootloader, panic output and Arduino/SDK internal logs still require USB. Feed requests can delay log delivery because the HTTP server shares the network loop. Monitoring does not wake the display; sleep still pauses aircraft requests.
 
 Omit `IP` to retain USB upload/monitoring. USB app upload also resets OTA selection to app0, so it works after previous wireless updates while preserving Wi-Fi/location/watchlist settings. Docker is not involved. Dotted IPv4 addresses are preferred; commas are normalized for convenience.
+
+
+### Alert appearance (0.5.1)
+
+Web setup now has an **Alert appearance** section. Set separate colours for ordinary watchlist matches, helicopters and military aircraft. Colours apply to the outer ring and the small watch markers; aircraft altitude colours and orange selection remain unchanged. Military classification takes precedence over helicopter classification, including for aircraft matched by a type/registration/callsign rule. When multiple categories are visible, the outer ring uses military first, then helicopters, then ordinary watch matches.
+
+The new defaults are a **30% peak brightness, 3-pixel ring and a gentle 4-second pulse**. Ordinary watches are green, helicopters cyan and military purple. The gentle pulse fades smoothly from 10% of the chosen peak up to the peak and back, instead of switching fully on/off. Controls are:
+
+- Ring brightness: 0–100%, relative to the overall display brightness; 0 hides the outer ring.
+- Ring width: 1–8 pixels.
+- Pulse/flash period: 2–12 whole seconds per cycle.
+- Effect: Off, Steady, Gentle pulse or Flash. Off leaves the small aircraft markers visible.
+
+Appearance settings persist across reboot. Hold five seconds to unlock setup, open the displayed address, adjust and save. Existing watch rules and display settings are retained when upgrading.

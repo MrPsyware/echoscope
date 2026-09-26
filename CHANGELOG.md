@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- Add saved alert colours for ordinary watchlist, helicopter and military matches.
+- Make ring brightness, thickness, effect and pulse/flash period configurable in web setup.
+- Default to a subtle 30% peak, 3-pixel, four-second smooth pulse.
+- Use category colours for watch markers and deterministic military/helicopter/watch priority for simultaneous alerts.
+
 ## 0.5.0
 
 - Add setup-unlocked LAN firmware upload into the inactive OTA slot, with S3 application-header, size and MD5 validation.

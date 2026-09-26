@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include "watchlist.h"
+#include "alert_style.h"
 
 namespace sky {
 constexpr double pi = 3.14159265358979323846;
@@ -63,6 +64,10 @@ inline bool watched(const Aircraft &a,const Watches &w) {
     return (w.military && a.military) || (w.rotorcraft && a.kind==AircraftKind::Rotorcraft) ||
         w.types.matches(a.type,true) || w.registrations.matches(a.registration) || w.callsigns.matches(a.callsign);
 }
+inline AlertKind alertKind(const Aircraft &a,const Watches &w) {
+    if(!watched(a,w)) return AlertKind::None;
+    return a.military?AlertKind::Military:a.kind==AircraftKind::Rotorcraft?AlertKind::Helicopter:AlertKind::Watch;
+}
 struct Snapshot { std::array<Aircraft,maxAircraft> aircraft{}; size_t count = 0; };
 inline float age(const Aircraft &a,uint32_t now) { return a.positionAge + uint32_t(now-a.received)/1000.0f; }
 // Histories live separately from feed snapshots; the device allocates these in
@@ -111,14 +116,19 @@ struct Model {
         if(trails) for(size_t i=0;i<maxAircraft;++i) trails[i].clear();
     }
     bool visible(const Aircraft &a,uint32_t now) const { return matches(a,filter) && (!altitudeFilter || altitudeBand(a.altitude)==altitudeFilter) && distance(a.position)<=range() && age(a,now)<=60; }
-    bool watchAlert(uint32_t now) const {
-        if(demo) return false;
+    AlertKind activeAlert(uint32_t now) const {
+        AlertKind active=AlertKind::None;
+        if(demo) return active;
         for(size_t i=0;i<data.count;++i) {
             const auto &a=data.aircraft[i];
-            if(visible(a,now) && age(a,now)<=20 && watched(a,watches)) return true;
+            if(visible(a,now) && age(a,now)<=20) {
+                const auto kind=alertKind(a,watches);
+                if(int(kind)>int(active)) active=kind;
+            }
         }
-        return false;
+        return active;
     }
+    bool watchAlert(uint32_t now) const { return activeAlert(now)!=AlertKind::None; }
     Aircraft *selection() {
         for(size_t i=0;i<data.count;++i) if(!std::strcmp(data.aircraft[i].hex,selected)) return &data.aircraft[i];
         return nullptr;

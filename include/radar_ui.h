@@ -12,6 +12,7 @@ inline lv_obj_t *canvas;
 inline sky::Model model;
 inline sky::InputGate input;
 inline sky::Activity activity;
+inline sky::AlertStyle alertStyle;
 inline bool photosEnabled=false,photoReady=false;
 inline char photoReg[16]{},photoCredit[128]{},photoLink[256]{},photoStatus[48]="Loading photo...";
 inline lv_img_dsc_t photoImage{};
@@ -25,10 +26,10 @@ inline void line(int x,int y,int x2,int y2,uint32_t color,int width=1,lv_opa_t o
     lv_point_t p[]={{lv_coord_t(x),lv_coord_t(y)},{lv_coord_t(x2),lv_coord_t(y2)}};
     lv_canvas_draw_line(canvas,p,2,&d);
 }
-inline void circle(int x,int y,int r,uint32_t color,int width=1,bool fill=false) {
+inline void circle(int x,int y,int r,uint32_t color,int width=1,bool fill=false,lv_opa_t opacity=LV_OPA_COVER) {
     lv_draw_rect_dsc_t d; lv_draw_rect_dsc_init(&d); d.radius=LV_RADIUS_CIRCLE;
     d.bg_opa=fill?LV_OPA_COVER:LV_OPA_TRANSP; d.bg_color=lv_color_hex(color);
-    d.border_color=lv_color_hex(color); d.border_width=width;
+    d.border_color=lv_color_hex(color); d.border_width=width; d.border_opa=opacity;
     lv_canvas_draw_rect(canvas,x-r,y-r,r*2+1,r*2+1,&d);
 }
 inline void text(int y,const char *s,const lv_font_t *font=&lv_font_montserrat_18,uint32_t color=white,int x=48,int width=370) {
@@ -181,7 +182,7 @@ inline void render(uint32_t now) {
         } else {
             segment(0,-7,5,0); segment(5,0,0,7); segment(0,7,-5,0); segment(-5,0,0,-7);
         }
-        if(sky::watched(a,model.watches)) circle(p.x,p.y,11,green,2);
+        if(sky::watched(a,model.watches)) circle(p.x,p.y,11,alertStyle.color(sky::alertKind(a,model.watches)),2);
         if(a.military) text(p.y-19,"M",&lv_font_montserrat_14,color,p.x+9,16);
         if(selected) {
             circle(p.x,p.y,15,amber);
@@ -201,7 +202,9 @@ inline void render(uint32_t now) {
     }
     if(model.demo && !activity.filterVisible) text(84,"DEMO",&lv_font_montserrat_14,muted);
     footer(visible);
-    if(model.watchAlert(now)) circle(centre,centre,229,(now%1600)<800?green:grid,7);
+    const auto alert=model.activeAlert(now);
+    const uint8_t opacity=alertStyle.opacity(now);
+    if(alert!=sky::AlertKind::None && opacity) circle(centre,centre,229,alertStyle.color(alert),alertStyle.width,false,opacity);
     if(!visible) text(310,stale?"Waiting for fresh positions":model.filter==sky::Filter::All?"No aircraft in this range":"No matching aircraft in range",&lv_font_montserrat_16,muted);
     if(stale) text(365,status,&lv_font_montserrat_14,amber);
 }

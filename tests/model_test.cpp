@@ -7,6 +7,28 @@
 #include <iostream>
 int main() {
     using namespace sky;
+    AlertStyle style;
+    assert(style.brightness==30 && style.width==3 && style.periodSeconds==4);
+    assert(style.opacity(0)<style.opacity(1000) && style.opacity(1000)<style.opacity(2000));
+    assert(style.opacity(2000)==77 && style.opacity(4000)==style.opacity(0));
+    assert(style.opacity(UINT32_MAX)<=77);
+    style.effect=AlertEffect::Steady; assert(style.opacity(0)==77 && style.opacity(3000)==77);
+    style.effect=AlertEffect::Flash; assert(style.opacity(0)==77 && style.opacity(2000)==0);
+    style.effect=AlertEffect::Off; assert(style.opacity(1000)==0);
+    style.effect=AlertEffect::Pulse; style.brightness=0; assert(style.opacity(2000)==0);
+    uint32_t color=123;
+    assert(parseAlertColor("#aB1234",color) && color==0xab1234);
+    assert(!parseAlertColor("#12345",color) && !parseAlertColor("#12345z",color) && color==0xab1234);
+    assert(!parseAlertColor("123456",color) && !parseAlertColor("#1234567",color));
+    Model categories; categories.demo=false; categories.watches.types.set("A380");
+    categories.watches.military=true; categories.watches.rotorcraft=true;
+    Snapshot mixed; mixed.count=3;
+    for(int i=0;i<3;++i) snprintf(mixed.aircraft[i].hex,12,"cat%d",i);
+    strcpy(mixed.aircraft[0].type,"A388"); mixed.aircraft[1].kind=AircraftKind::Rotorcraft; mixed.aircraft[2].military=true;
+    categories.ingest(mixed,0); assert(categories.activeAlert(0)==AlertKind::Military);
+    categories.data.aircraft[2].positionAge=21; assert(categories.activeAlert(0)==AlertKind::Helicopter);
+    categories.data.aircraft[1].positionAge=21; assert(categories.activeAlert(0)==AlertKind::Watch);
+    assert(categories.activeAlert(21000)==AlertKind::None);
     NetworkPolicy net;
     assert(net.fallback(false,false,0));
     assert(!net.fallback(true,false,29999));

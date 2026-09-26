@@ -35,6 +35,7 @@ String ssid,password,csrf,photoBase;
 String watchTypes,watchRegs,watchCalls;
 unsigned brightness=100,sleepMinutes=60;
 bool watchMilitary=false,watchRotor=false;
+sky::AlertStyle savedAlertStyle;
 uint32_t photoRetryAt=0;
 char photoAttempt[16]{};
 lv_color_t *photoPixels=nullptr;
@@ -279,6 +280,10 @@ void networkLogs() {
     server.sendHeader("X-Log-Cursor",next); server.sendHeader("X-Log-Lost",lost?"1":"0");
     server.send(200,"text/plain",String(chunk,n));
 }
+String alertColorInput(const char *name,const char *label,uint32_t color) {
+    char hex[8]; snprintf(hex,sizeof(hex),"#%06lx",(unsigned long)color);
+    return String("<label>")+label+"</label><input type='color' style='height:52px' name='"+name+"' value='"+hex+"'>";
+}
 void setupPage() {
     if(!portal) { server.send(403,"text/plain","Hold the knob for 5 seconds to enable setup."); return; }
     String page=R"HTML(<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>EchoScope setup</title>
@@ -297,7 +302,18 @@ void setupPage() {
     page+="<label>Registrations</label><input name='watch_regs' maxlength='255' placeholder='G-UZHO' value='"+escape(watchRegs)+"'>";
     page+="<label>Callsigns</label><input name='watch_calls' maxlength='255' placeholder='RCH*' value='"+escape(watchCalls)+"'>";
     page+="<label><input style='width:auto' type='checkbox' name='watch_military' "+String(watchMilitary?"checked":"")+"> Watch military aircraft</label>";
-    page+="<label><input style='width:auto' type='checkbox' name='watch_rotor' "+String(watchRotor?"checked":"")+"> Watch helicopters</label><p>Fresh visible matches pulse the outer green ring. Range, aircraft and altitude filters apply. Sleep pauses monitoring.</p>";
+    page+="<label><input style='width:auto' type='checkbox' name='watch_rotor' "+String(watchRotor?"checked":"")+"> Watch helicopters</label><p>Fresh visible matches activate the outer alert ring. Range, aircraft and altitude filters apply. Sleep pauses monitoring.</p>";
+    page+="<h2>Alert appearance</h2>";
+    page+=alertColorInput("alert_watch","Watchlist colour",savedAlertStyle.watch);
+    page+=alertColorInput("alert_heli","Helicopter colour",savedAlertStyle.helicopter);
+    page+=alertColorInput("alert_mil","Military colour",savedAlertStyle.military);
+    page+="<label>Ring peak brightness (%)</label><input name='alert_bright' type='number' min='0' max='100' required value='"+String(savedAlertStyle.brightness)+"'>";
+    page+="<label>Ring width (pixels)</label><input name='alert_width' type='number' min='1' max='8' required value='"+String(savedAlertStyle.width)+"'>";
+    page+="<label>Pulse / flash period (seconds)</label><input name='alert_period' type='number' min='2' max='12' required value='"+String(savedAlertStyle.periodSeconds)+"'>";
+    page+="<label>Ring effect</label><select name='alert_effect' style='width:100%;padding:13px;font:inherit'>";
+    const char *effects[]={"Off","Steady","Gentle pulse","Flash"};
+    for(int i=0;i<4;++i) page+="<option value='"+String(i)+"' "+String(i==int(savedAlertStyle.effect)?"selected":"")+">"+effects[i]+"</option>";
+    page+="</select><p>Brightness is relative to the display brightness. Colours also identify watch markers. With several categories present, the outer ring prioritises military, then helicopters, then other watch matches. Off hides the outer ring; markers remain.</p>";
     page+="<label>Photo service URL (optional)</label><input name='photo_url' maxlength='160' placeholder='http://192.168.1.10:8086' value='"+escape(photoBase)+"'>";
     page+="<p>Leave blank to disable photos. Use your Docker server's LAN address.</p><button type='button' onclick=\"const b=this;b.disabled=true;fetch('/test-photo',{method:'POST',body:new URLSearchParams(new FormData(b.form))}).then(async r=>{document.getElementById('test-result').textContent=await r.text()}).catch(()=>{document.getElementById('test-result').textContent='Connection test failed'}).finally(()=>b.disabled=false)\">Test connection</button><p id='test-result' role='status'></p>";
     page+="<button>Save and start radar</button></form><p>Live aircraft data: adsb.fi. Hold the knob to reopen setup. Settings stay on this device.</p>";
@@ -327,6 +343,23 @@ void saveSetup() {
        !watches.types.set(types.c_str()) || !watches.registrations.set(regs.c_str()) || !watches.callsigns.set(calls.c_str())) {
         server.send(400,"text/plain","Check brightness (5-100), sleep (0-1440 whole minutes), and watchlists (16 entries, 15 characters each; letters, numbers, hyphens, optional trailing *)."); return;
     }
+    sky::AlertStyle newAlert;
+    double ringBrightness,ringWidth,ringPeriod,ringEffect;
+    if(!sky::parseAlertColor(server.arg("alert_watch").c_str(),newAlert.watch) ||
+       !sky::parseAlertColor(server.arg("alert_heli").c_str(),newAlert.helicopter) ||
+       !sky::parseAlertColor(server.arg("alert_mil").c_str(),newAlert.military) ||
+       !coordinate(server.arg("alert_bright"),0,100,ringBrightness) || floor(ringBrightness)!=ringBrightness ||
+       !coordinate(server.arg("alert_width"),1,8,ringWidth) || floor(ringWidth)!=ringWidth ||
+       !coordinate(server.arg("alert_period"),2,12,ringPeriod) || floor(ringPeriod)!=ringPeriod ||
+       !coordinate(server.arg("alert_effect"),0,3,ringEffect) || floor(ringEffect)!=ringEffect) {
+        server.send(400,"text/plain","Check alert colours, brightness (0-100), width (1-8), period (2-12) and effect."); return;
+    }
+    newAlert.brightness=unsigned(ringBrightness); newAlert.width=unsigned(ringWidth);
+    newAlert.periodSeconds=unsigned(ringPeriod); newAlert.effect=sky::AlertEffect(unsigned(ringEffect));
+    savedAlertStyle=newAlert;
+    prefs.putUInt("alert_watch",newAlert.watch); prefs.putUInt("alert_heli",newAlert.helicopter); prefs.putUInt("alert_mil",newAlert.military);
+    prefs.putUInt("alert_bright",newAlert.brightness); prefs.putUInt("alert_width",newAlert.width);
+    prefs.putUInt("alert_period",newAlert.periodSeconds); prefs.putUInt("alert_effect",unsigned(newAlert.effect));
     watches.military=server.hasArg("watch_military"); watches.rotorcraft=server.hasArg("watch_rotor");
     watchTypes=types; watchRegs=regs; watchCalls=calls;
     watchMilitary=watches.military; watchRotor=watches.rotorcraft;
@@ -336,6 +369,7 @@ void saveSetup() {
     prefs.putBool("watch_mil",watchMilitary); prefs.putBool("watch_rotor",watchRotor);
     lvgl_port_lock(-1);
     brightness=unsigned(newBrightness);
+    ui::alertStyle=newAlert;
     ui::model.watches=watches; ui::activity.sleepAfterMs=sleepMinutes*60000;
     ui::activity.lastActivity=millis(); applyBrightness();
     lvgl_port_unlock();
@@ -577,13 +611,21 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.5.0 / wireless upload and network diagnostics");
+    deviceLog.println("EchoScope 0.5.1 / configurable alert appearance");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
     photoBase=prefs.getString("photo_url",""); ui::photosEnabled=!photoBase.isEmpty();
     photoPixels=static_cast<lv_color_t*>(heap_caps_malloc(200*150*2,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
     if(!photoPixels) ui::photosEnabled=false;
+    savedAlertStyle.watch=prefs.getUInt("alert_watch",0x68F3AE)&0xFFFFFF;
+    savedAlertStyle.helicopter=prefs.getUInt("alert_heli",0x62D8F5)&0xFFFFFF;
+    savedAlertStyle.military=prefs.getUInt("alert_mil",0xD59AF5)&0xFFFFFF;
+    savedAlertStyle.brightness=std::min<uint32_t>(100,prefs.getUInt("alert_bright",30));
+    savedAlertStyle.width=std::max<uint32_t>(1,std::min<uint32_t>(8,prefs.getUInt("alert_width",3)));
+    savedAlertStyle.periodSeconds=std::max<uint32_t>(2,std::min<uint32_t>(12,prefs.getUInt("alert_period",4)));
+    savedAlertStyle.effect=sky::AlertEffect(std::min<uint32_t>(3,prefs.getUInt("alert_effect",2)));
+    ui::alertStyle=savedAlertStyle;
     brightness=std::max<uint32_t>(5,std::min<uint32_t>(100,prefs.getUInt("brightness",100)));
     sleepMinutes=std::min<uint32_t>(1440,prefs.getUInt("sleep_min",60)); ui::activity.sleepAfterMs=sleepMinutes*60000;
     watchTypes=prefs.getString("watch_types",""); watchRegs=prefs.getString("watch_regs",""); watchCalls=prefs.getString("watch_calls","");
