@@ -14,7 +14,7 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 - Rotate to zoom or select aircraft; a bare knob press toggles the mode.
 - Bold, brighter footer text shows what rotation controls.
 - Touch an aircraft to see callsign, registration, type, altitude, ground speed, ground track, distance, bearing and position age where available.
-- Faint green flight paths, with the selected path highlighted in amber above other paths.
+- Faint altitude-coloured flight paths, with the selected path highlighted in amber above other paths.
 - N/E/S/W compass labels and a decorative radar sweep.
 - Local Wi-Fi/location setup, saved settings, stale-data indication and reconnection handling.
 
@@ -28,14 +28,14 @@ The user has confirmed working display, Wi-Fi, live aircraft retrieval, touch/de
 
 | Input | Radar view | Flight details |
 |---|---|---|
-| Rotate | Zoom or cycle visible aircraft, depending on mode | Cycle visible aircraft |
-| Press without touching the screen | Toggle zoom / aircraft selection | Return to radar, preserving the mode |
+| Rotate | Zoom, cycle visible aircraft or choose an altitude band | Cycle visible aircraft |
+| Press without touching the screen | Cycle range → aircraft → altitude mode | Return to radar, preserving the mode |
 | Touch an aircraft | Select it and open details | Tap to return to radar |
 | Touch blank radar space | Open the highlighted aircraft | Tap to return to radar |
-| Tap bottom range / aircraft count | Select zoom / aircraft-selection mode | — |
+| Tap bottom range / aircraft count / ALT | Select the corresponding rotation mode | — |
 | Hold knob 5 seconds | Open Wi-Fi/location setup | Open Wi-Fi/location setup |
 
-The active footer section is bold and brighter: **50 km** for zoom, or **2 aircraft** for selection. Touch and mechanical-click events are combined into one gesture, so pressing the screen does not immediately undo the touch action. A bare click is deferred by 180 ms to allow touch detection.
+The active footer section is bold and brighter: **50 km** for zoom, **2 planes** for selection, or **ALT** for altitude filtering. Touch and mechanical-click events are combined into one gesture, so pressing the screen does not immediately undo the touch action. A bare click is deferred by 180 ms to allow touch detection.
 
 ## First installation
 
@@ -112,7 +112,7 @@ The supported `BOARD_VIEWE_UEDX46460015_MD50ET` definition is used. Its touch wi
 
 ## Aircraft and trails
 
-The nearest 64 valid airborne aircraft within 100 km are retained. Rotation skips aircraft outside the current visible range. Selection follows aircraft identity across updates. Unknown fields are shown as unavailable; origin/destination lookups are not implemented.
+Up to 64 valid airborne aircraft within 100 km are retained, prioritising watchlist matches and then nearest distance. Rotation skips aircraft outside the current visible range. Selection follows aircraft identity across updates. Unknown fields are shown as unavailable; origin/destination lookups are not implemented.
 
 Trails retain the path while the aircraft remains visible and fresh. They clear when the aircraft disappears, exits the current range (including after zooming), or its position ages past 60 seconds. Re-entry starts a new history. The start of the encounter is preserved while older geometry is simplified when the bounded 192-point history fills. Straight sections are simplified within a 20-metre tolerance. Histories are stored in PSRAM and clipped at the radar boundary.
 
@@ -168,7 +168,7 @@ The radar radius is now 200 pixels (previously 182). Normal live operation has n
 
 After 10 seconds without touching the screen, the filter disappears and reveals the north marker. Its touch area stays at the top: the first tap reveals the current filter; later taps cycle it. Touching the screen extends its visible period, while turning/pressing the knob does not reveal a hidden filter.
 
-After one hour without touch, press or rotation, the panel turns off and radar rendering and new HTTP feed requests pause. An already-running request may finish. Touch/knob sensing and Wi-Fi remain active; this is display standby, not ESP32 deep sleep. The first interaction wakes the display without changing settings or selection, and requests fresh aircraft data. Serial `[power]` messages mark sleep and wake.
+After the configured idle period (one hour by default) without touch, press or rotation, the panel turns off and radar rendering and new HTTP feed requests pause. An already-running request may finish. Touch/knob sensing and Wi-Fi remain active; this is display standby, not ESP32 deep sleep. The first interaction wakes the display without changing settings or selection, and requests fresh aircraft data. Serial `[power]` messages mark sleep and wake.
 
 ### Optional aircraft photos (0.3.0)
 
@@ -177,3 +177,21 @@ The [photo service](photo-service/README.md) runs in Docker on another LAN compu
 Aircraft details automatically request the actual aircraft's thumbnail by registration when photos are enabled. The same page shows aircraft type, altitude, speed, distance/bearing, track and position age alongside the photo. Turn to select another flight; tap or press to return to radar. Photos retain photographer credit; open `http://KNOB-IP/photo` for the original-photo link. The service does not store photographs on disk. Missing photos and unavailable servers leave the radar usable. New photo requests pause during standby, and obsolete responses are discarded. The firmware accepts only the bounded image protocol; it does not decode JPEGs. See the service README for deployment, provider and protocol details.
 
 The radar radius is now 210 pixels.
+
+
+### Altitude colours and watchlists (0.4.0)
+
+Bare clicks cycle **Range → Aircraft → Altitude → Range**. In altitude mode, rotation cycles All, below 5,000 ft, 5,000–14,999 ft, 15,000–29,999 ft, 30,000 ft and above, and unknown altitude. The selected band remains active when changing rotation mode. Filtering happens before the 64-aircraft capacity limit. Range, aircraft-class and altitude filters combine.
+
+Aircraft and their trails use green below 5,000 ft, cyan below 15,000 ft, blue below 30,000 ft and purple above; unknown altitude is muted. The selected aircraft and trail remain orange. Stale unselected symbols are muted. Altitude is reported barometric altitude, falling back to geometric altitude when unavailable.
+
+Hold for five seconds and open the displayed setup address to configure:
+
+- **Brightness:** 5–100%, saved and restored after wake/reboot.
+- **Idle sleep:** 0–1,440 whole minutes; 0 disables automatic sleep.
+- **Watchlists:** comma/space-separated types, registrations and callsigns, up to 16 entries per field. Matching ignores case; a trailing `*` matches a prefix (`B74*`, `RCH*`). `A380` also matches the ICAO `A388` code. Other type entries use feed type codes.
+- **Military/helicopter watches:** optional category switches; classifications depend on the feed's metadata.
+
+Visible watch matches have a small green ring. A bold outer ring pulses while any matching aircraft has a position no older than 20 seconds. Alerts respect the selected range and filters, stop when positions age or leave coverage, and never trigger for demo data. Watch matches receive priority when retaining the nearest 64 matching aircraft. Monitoring pauses during sleep; alerts do not wake the screen. Saved watch rules and display settings survive reboot. Flight details still open by touch and return with a click/tap.
+
+Satellite tracking is not included: it would require a separate orbital feed and position calculations, rather than the adsb.fi aircraft feed.

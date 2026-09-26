@@ -16,7 +16,6 @@ inline bool photosEnabled=false,photoReady=false;
 inline char photoReg[16]{},photoCredit[128]{},photoLink[256]{},photoStatus[48]="Loading photo...";
 inline lv_img_dsc_t photoImage{};
 inline std::atomic<bool> asleep{false};
-inline int footerSplitX=centre;
 inline bool settings=false,setupOpeningTouch=false,setupConnected=false;
 inline char setupSSID[33]{};
 inline std::atomic<bool> requestFeed{false};
@@ -46,21 +45,19 @@ inline void metric(int y,const char *name,float value,const char *unit) {
 }
 inline void footer(size_t visible) {
     char zoom[24],flights[32];
-    std::snprintf(zoom,sizeof(zoom),"%.0f km",model.range());
-    std::snprintf(flights,sizeof(flights),"%u aircraft",unsigned(visible));
-    auto width=[](const char *s) { lv_point_t p; lv_txt_get_size(&p,s,&lv_font_montserrat_16,0,0,400,LV_TEXT_FLAG_NONE); return int(p.x); };
-    const int z=width(zoom)+2,separator=width(" / "),f=width(flights)+2;
-    const int start=(size-z-separator-f)/2;
+    snprintf(zoom,sizeof(zoom),"%.0f km",model.range());
+    snprintf(flights,sizeof(flights),"%u planes",unsigned(visible));
     lv_draw_rect_dsc_t bg; lv_draw_rect_dsc_init(&bg); bg.bg_color=lv_color_hex(0x030D10);
     bg.bg_opa=LV_OPA_COVER; bg.border_width=0;
-    lv_canvas_draw_rect(canvas,start-6,416,z+separator+f+12,25,&bg);
-    footerSplitX=start+z+separator/2;
-    text(420,zoom,&lv_font_montserrat_16,model.selectMode?muted:green,start,z);
-    text(420," / ",&lv_font_montserrat_16,muted,start+z,separator);
-    text(420,flights,&lv_font_montserrat_16,model.selectMode?green:muted,start+z+separator,f);
-    // One-pixel emboldening retains the compact built-in font and baseline.
-    if(model.selectMode) text(420,flights,&lv_font_montserrat_16,green,start+z+separator+1,f);
-    else text(420,zoom,&lv_font_montserrat_16,green,start+1,z);
+    lv_canvas_draw_rect(canvas,76,400,314,42,&bg);
+    const char *labels[]={zoom,flights,"ALT"};
+    const int active=model.altitudeMode?2:model.selectMode?1:0;
+    for(int i=0;i<3;++i) {
+        text(402,labels[i],&lv_font_montserrat_16,i==active?green:muted,83+i*100,100);
+        if(i==active) text(402,labels[i],&lv_font_montserrat_16,green,84+i*100,100);
+    }
+    text(424,sky::altitudeLabel(model.altitudeFilter),&lv_font_montserrat_14,
+         model.altitudeFilter?sky::altitudeColor(model.altitudeFilter==1?0:model.altitudeFilter==2?5000:model.altitudeFilter==3?15000:model.altitudeFilter==4?30000:NAN):muted);
 }
 inline void render(uint32_t now) {
     model.refresh(now);
@@ -135,7 +132,7 @@ inline void render(uint32_t now) {
     line(centre-radius,centre,centre+radius,centre,grid);
     line(centre,centre-radius,centre,centre+radius,grid);
     text(48,"N",&lv_font_montserrat_16,muted);
-    text(390,"S",&lv_font_montserrat_14,muted);
+    text(378,"S",&lv_font_montserrat_14,muted);
     text(225,"W",&lv_font_montserrat_14,muted,38,26);
     text(225,"E",&lv_font_montserrat_14,muted,402,26);
     // Sweep is decorative. Aircraft are always drawn from their last reported position.
@@ -156,7 +153,7 @@ inline void render(uint32_t now) {
             auto from=trail->points[j-1],to=trail->points[j];
             if(!sky::clipToCircle(from,to,model.range())) continue;
             auto p=screen(from),q=screen(to);
-            line(p.x,p.y,q.x,q.y,selected?amber:green,selected?2:1,selected?140:45);
+            line(p.x,p.y,q.x,q.y,selected?amber:sky::altitudeColor(a.altitude),selected?2:1,selected?140:45);
         }
     }
     size_t visible=0;
@@ -165,7 +162,7 @@ inline void render(uint32_t now) {
         if(!model.visible(a,now)) continue;
         ++visible;
         const bool selected=!std::strcmp(a.hex,model.selected);
-        const uint32_t color=sky::age(a,now)>20?muted:selected?amber:green;
+        const uint32_t color=selected?amber:sky::age(a,now)>20?muted:sky::altitudeColor(a.altitude);
         auto p=screen(a.position);
         // Heading-oriented line silhouettes; a diamond means unknown class.
         const float heading=std::isfinite(a.track)?a.track*sky::pi/180:0;
@@ -184,6 +181,7 @@ inline void render(uint32_t now) {
         } else {
             segment(0,-7,5,0); segment(5,0,0,7); segment(0,7,-5,0); segment(-5,0,0,-7);
         }
+        if(sky::watched(a,model.watches)) circle(p.x,p.y,11,green,2);
         if(a.military) text(p.y-19,"M",&lv_font_montserrat_14,color,p.x+9,16);
         if(selected) {
             circle(p.x,p.y,15,amber);
@@ -203,6 +201,7 @@ inline void render(uint32_t now) {
     }
     if(model.demo && !activity.filterVisible) text(84,"DEMO",&lv_font_montserrat_14,muted);
     footer(visible);
+    if(model.watchAlert(now)) circle(centre,centre,229,(now%1600)<800?green:grid,7);
     if(!visible) text(310,stale?"Waiting for fresh positions":model.filter==sky::Filter::All?"No aircraft in this range":"No matching aircraft in range",&lv_font_montserrat_16,muted);
     if(stale) text(365,status,&lv_font_montserrat_14,amber);
 }
@@ -212,7 +211,7 @@ inline void tap(int x,int y,uint32_t now) {
         model.details=false; model.refresh(now); return;
     }
     if(y>=20 && y<67 && x>=128 && x<=338) { if(activity.tapFilter(now)) { model.cycleFilter(now); requestFeed=true; } return; }
-    if(y>=415) { model.selectMode=x>=footerSplitX; model.refresh(now); return; }
+    if(y>=400) { model.selectMode=x>=183 && x<283; model.altitudeMode=x>=283; model.refresh(now); return; }
     float east=(x-centre)*model.range()/radius, north=(centre-y)*model.range()/radius;
     int i=model.hit(east,north,25*model.range()/radius,now);
     if(i>=0) { model.select(i); model.details=true; }

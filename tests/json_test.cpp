@@ -67,5 +67,13 @@ int main() {
     military["lat"]=51.5; military["lon"]=0.5; military["seen_pos"]=0;
     assert(sky::parseAircraft(doc,out,51.5,0,0,sky::Filter::Military) && out.count==1);
     assert(!strcmp(out.aircraft[0].hex,"military"));
+    military["t"]="A388"; military["alt_baro"]=35000;
+    sky::Watches watches; watches.types.set("A380");
+    assert(sky::parseAircraft(doc,out,51.5,0,0,sky::Filter::All,0,watches));
+    bool foundWatch=false; for(size_t i=0;i<out.count;++i) foundWatch |= sky::watched(out.aircraft[i],watches);
+    assert(foundWatch && out.count==sky::maxAircraft); // Farther watch retained before capacity limit.
+    assert(sky::parseAircraft(doc,out,51.5,0,0,sky::Filter::All,4,watches) && out.count==1);
+    assert(out.aircraft[0].altitude==35000);
+    assert(sky::parseAircraft(doc,out,51.5,0,0,sky::Filter::All,2,watches) && out.count==0);
     std::cout << "JSON checks passed: valid/empty/error feeds, ground/stale/missing positions, unknown metrics and capacity.\n";
 }

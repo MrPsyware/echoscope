@@ -1,5 +1,6 @@
 #include "network_policy.h"
 #include <Arduino.h>
+#include <esp_lcd_panel_io.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -28,6 +29,9 @@ WebServer server(80);
 DNSServer dns;
 esp_panel::board::Board *board;
 String ssid,password,csrf,photoBase;
+String watchTypes,watchRegs,watchCalls;
+unsigned brightness=100,sleepMinutes=60;
+bool watchMilitary=false,watchRotor=false;
 uint32_t photoRetryAt=0;
 char photoAttempt[16]{};
 lv_color_t *photoPixels=nullptr;
@@ -70,10 +74,18 @@ void sampleButton(void *) {
         vTaskDelayUntil(&next,std::max(TickType_t(1),pdMS_TO_TICKS(5)));
     }
 }
+// This AMOLED uses the board's SH8601-compatible QSPI command framing.
+// Serialize with LVGL transfers; the board init sequence uses 0x51 for luminance.
+void applyBrightness() {
+    const uint8_t value=uint8_t((brightness*255+50)/100);
+    const auto result=esp_lcd_panel_io_tx_param(board->getLCD()->getBus()->getControlPanelHandle(),0x02005100,&value,1);
+    if(result!=ESP_OK) Serial.printf("[power] Brightness command failed: %d\n",result);
+}
 bool wakeForInput(uint32_t now,bool touch=false) {
     if(!ui::activity.interact(now,touch)) return false;
     ui::asleep=false; ui::input=sky::InputGate{};
     if(!board->getLCD()->setDisplayOnOff(true)) Serial.println("[power] Display wake command failed");
+    applyBrightness();
     ui::requestFeed=true;
     Serial.println("[power] Awake; refreshing aircraft");
     return true;
@@ -87,7 +99,12 @@ void controls(lv_timer_t *) {
     portENTER_CRITICAL(&encoderMux); steps=encoderSteps; encoderSteps=0; portEXIT_CRITICAL(&encoderMux);
     if(steps && wakeForInput(now)) { steps=0; remainder=0; }
     remainder+=steps;
-    if(std::abs(remainder)>=transitionsPerDetent) { if(!ui::settings) ui::model.rotate(remainder/transitionsPerDetent,now); remainder%=transitionsPerDetent; }
+    if(std::abs(remainder)>=transitionsPerDetent) {
+        const int previousBand=ui::model.altitudeFilter;
+        if(!ui::settings) ui::model.rotate(remainder/transitionsPerDetent,now);
+        if(previousBand!=ui::model.altitudeFilter) ui::requestFeed=true;
+        remainder%=transitionsPerDetent;
+    }
     ButtonEvent event;
     while(xQueueReceive(buttonQueue,&event,0)==pdTRUE) {
         if(event.kind==sky::ButtonDebounce::Down) {
@@ -105,7 +122,7 @@ void controls(lv_timer_t *) {
     if(ui::input.takeClick(millis())) {
         if(ui::settings) ui::settings=false;
         else ui::model.press(now);
-        Serial.printf("[input] Click accepted; rotation=%s\n",ui::model.selectMode?"aircraft":"range");
+        Serial.printf("[input] Click accepted; rotation=%s\n",ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
     }
     if(ui::activity.tick(millis(),ui::input.touching || ui::input.buttonHeld || wakeButton)) {
         ui::asleep=true;
@@ -188,6 +205,14 @@ void setupPage() {
     page+="<label>Wi-Fi password</label><input name='password' type='password' maxlength='63' autocomplete='new-password' placeholder='Leave blank to keep saved password'>";
     page+="<label>Latitude</label><input name='lat' type='number' step='any' min='-90' max='90' required value='"+(configured?String(homeLat,6):String(""))+"'>";
     page+="<label>Longitude</label><input name='lon' type='number' step='any' min='-180' max='180' required value='"+(configured?String(homeLon,6):String(""))+"'>";
+    page+="<h2>Display</h2><label>Brightness (%)</label><input name='brightness' type='number' min='5' max='100' required value='"+String(brightness)+"'>";
+    page+="<label>Sleep after idle minutes (0 = never)</label><input name='sleep' type='number' min='0' max='1440' required value='"+String(sleepMinutes)+"'>";
+    page+="<h2>Watchlist</h2><p>Comma-separated types, registrations or callsigns. A trailing * matches a prefix. Up to 16 entries per field, 15 characters each. A380 also matches A388.</p>";
+    page+="<label>Aircraft types</label><input name='watch_types' maxlength='255' placeholder='A380, B74*' value='"+escape(watchTypes)+"'>";
+    page+="<label>Registrations</label><input name='watch_regs' maxlength='255' placeholder='G-UZHO' value='"+escape(watchRegs)+"'>";
+    page+="<label>Callsigns</label><input name='watch_calls' maxlength='255' placeholder='RCH*' value='"+escape(watchCalls)+"'>";
+    page+="<label><input style='width:auto' type='checkbox' name='watch_military' "+String(watchMilitary?"checked":"")+"> Watch military aircraft</label>";
+    page+="<label><input style='width:auto' type='checkbox' name='watch_rotor' "+String(watchRotor?"checked":"")+"> Watch helicopters</label><p>Fresh visible matches pulse the outer green ring. Range, aircraft and altitude filters apply. Sleep pauses monitoring.</p>";
     page+="<label>Photo service URL (optional)</label><input name='photo_url' maxlength='160' placeholder='http://192.168.1.10:8086' value='"+escape(photoBase)+"'>";
     page+="<p>Leave blank to disable photos. Use your Docker server's LAN address.</p><button type='button' onclick=\"const b=this;b.disabled=true;fetch('/test-photo',{method:'POST',body:new URLSearchParams(new FormData(b.form))}).then(async r=>{document.getElementById('test-result').textContent=await r.text()}).catch(()=>{document.getElementById('test-result').textContent='Connection test failed'}).finally(()=>b.disabled=false)\">Test connection</button><p id='test-result' role='status'></p>";
     page+="<button>Save and start radar</button></form><p>Live aircraft data: adsb.fi. Hold the knob to reopen setup. Settings stay on this device.</p>";
@@ -208,6 +233,27 @@ void saveSetup() {
     }
     if(!newPassword.length() && newSSID==ssid) newPassword=password;
     if(newPassword.length() && newPassword.length()<8) { server.send(400,"text/plain","Wi-Fi password must be at least 8 characters."); return; }
+    double newBrightness,newSleep;
+    sky::Watches watches;
+    const String types=server.arg("watch_types"),regs=server.arg("watch_regs"),calls=server.arg("watch_calls");
+    if(!coordinate(server.arg("brightness"),5,100,newBrightness) || std::floor(newBrightness)!=newBrightness ||
+       !coordinate(server.arg("sleep"),0,1440,newSleep) || std::floor(newSleep)!=newSleep ||
+       types.length()>255 || regs.length()>255 || calls.length()>255 ||
+       !watches.types.set(types.c_str()) || !watches.registrations.set(regs.c_str()) || !watches.callsigns.set(calls.c_str())) {
+        server.send(400,"text/plain","Check brightness (5-100), sleep (0-1440 whole minutes), and watchlists (16 entries, 15 characters each; letters, numbers, hyphens, optional trailing *)."); return;
+    }
+    watches.military=server.hasArg("watch_military"); watches.rotorcraft=server.hasArg("watch_rotor");
+    watchTypes=types; watchRegs=regs; watchCalls=calls;
+    watchMilitary=watches.military; watchRotor=watches.rotorcraft;
+    sleepMinutes=unsigned(newSleep);
+    prefs.putUInt("brightness",unsigned(newBrightness)); prefs.putUInt("sleep_min",sleepMinutes);
+    prefs.putString("watch_types",types); prefs.putString("watch_regs",regs); prefs.putString("watch_calls",calls);
+    prefs.putBool("watch_mil",watchMilitary); prefs.putBool("watch_rotor",watchRotor);
+    lvgl_port_lock(-1);
+    brightness=unsigned(newBrightness);
+    ui::model.watches=watches; ui::activity.sleepAfterMs=sleepMinutes*60000;
+    ui::activity.lastActivity=millis(); applyBrightness();
+    lvgl_port_unlock();
     photoBase=newPhoto; prefs.putString("photo_url",photoBase); photoAttempt[0]=0; photoRetryAt=0;
     lvgl_port_lock(-1); ui::photosEnabled=!photoBase.isEmpty() && photoPixels; ui::photoReady=false; lvgl_port_unlock();
     ssid=newSSID; password=newPassword; homeLat=lat; homeLon=lon; configured=true;
@@ -359,7 +405,7 @@ void fetch() {
     if(!http.begin(client,url)) { Serial.println("[feed] HTTP begin failed; retry in 15000 ms"); status("Cannot open data feed"); nextFetch=millis()+15000; return; }
     const char *headers[]={"Content-Type","Content-Encoding","Transfer-Encoding","Retry-After","Server","CF-Ray"};
     http.collectHeaders(headers,sizeof(headers)/sizeof(headers[0]));
-    lvgl_port_lock(-1); const auto fetchFilter=ui::model.filter; lvgl_port_unlock();
+    lvgl_port_lock(-1); const auto fetchFilter=ui::model.filter; const int fetchAltitude=ui::model.altitudeFilter; const auto watches=ui::model.watches; lvgl_port_unlock();
     const uint32_t requestStart=millis();
     const int code=http.GET();
     Serial.printf("[feed] HTTP=%d, headers after=%lu ms, content length=%d\n",code,
@@ -392,12 +438,12 @@ void fetch() {
                 logFeedBytes("Response tail",body.text.c_str()+tail,body.text.length()-tail);
                 Serial.printf("[feed] JSON decode failed: %s; document overflow=%s, free heap=%u, largest internal block=%u\n",error.c_str(),doc.overflowed()?"yes":"no",ESP.getFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
                 char message[80]; snprintf(message,sizeof(message),"JSON: %s",error.c_str()); status(message);
-            } else if(!sky::parseAircraft(doc,incoming,homeLat,homeLon,millis(),fetchFilter)) {
+            } else if(!sky::parseAircraft(doc,incoming,homeLat,homeLon,millis(),fetchFilter,fetchAltitude,watches)) {
                 Serial.println("[feed] JSON schema error: expected top-level 'ac' array (missing or wrong type)");
                 status("Feed missing aircraft array");
             } else {
                 lvgl_port_lock(-1);
-                if(ui::model.filter==fetchFilter) ui::model.ingest(incoming,millis());
+                if(ui::model.filter==fetchFilter && ui::model.altitudeFilter==fetchAltitude) ui::model.ingest(incoming,millis());
                 lvgl_port_unlock(); ok=true; status("Live positions");
                 Serial.printf("[feed] Parsed %u entries; kept %u aircraft\n",unsigned(doc["ac"].size()),unsigned(incoming.count));
             }
@@ -446,18 +492,25 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("EchoScope 0.3.2 / LAN setup and combined photo details");
+    Serial.println("EchoScope 0.4.0 / altitude, watchlists and display settings");
     Serial.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
     photoBase=prefs.getString("photo_url",""); ui::photosEnabled=!photoBase.isEmpty();
     photoPixels=static_cast<lv_color_t*>(heap_caps_malloc(200*150*2,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
     if(!photoPixels) ui::photosEnabled=false;
+    brightness=std::max<uint32_t>(5,std::min<uint32_t>(100,prefs.getUInt("brightness",100)));
+    sleepMinutes=std::min<uint32_t>(1440,prefs.getUInt("sleep_min",60)); ui::activity.sleepAfterMs=sleepMinutes*60000;
+    watchTypes=prefs.getString("watch_types",""); watchRegs=prefs.getString("watch_regs",""); watchCalls=prefs.getString("watch_calls","");
+    ui::model.watches.types.set(watchTypes.c_str()); ui::model.watches.registrations.set(watchRegs.c_str()); ui::model.watches.callsigns.set(watchCalls.c_str());
+    watchMilitary=prefs.getBool("watch_mil",false); watchRotor=prefs.getBool("watch_rotor",false);
+    ui::model.watches.military=watchMilitary; ui::model.watches.rotorcraft=watchRotor;
     configured=prefs.getBool("set",false); ssid=prefs.getString("ssid"); password=prefs.getString("pass");
     homeLat=prefs.getDouble("lat",0); homeLon=prefs.getDouble("lon",0);
     snprintf(ui::setupPassword,sizeof(ui::setupPassword),"echo-%08lx",(unsigned long)esp_random());
     csrf=String(esp_random(),HEX)+String(esp_random(),HEX);
     board=new esp_panel::board::Board(); board->init(); assert(board->begin());
+    applyBrightness();
     assert(lvgl_port_init(board->getLCD(),board->getTouch()));
     auto *pixels=(lv_color_t*)heap_caps_malloc(ui::size*ui::size*sizeof(lv_color_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     assert(pixels);

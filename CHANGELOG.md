@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Add altitude colours and a third knob mode for altitude-band filtering, including unknown altitude.
+- Add saved type/registration/callsign watchlists with prefix matching, an A380 alias, and military/rotorcraft options.
+- Prioritise watched aircraft at the capacity limit; mark visible matches and pulse a bold green outer ring for fresh matches.
+- Add persisted AMOLED brightness and configurable idle sleep (including never) to web setup.
+
 ## 0.3.2
 
 - Show the configured Wi-Fi SSID and LAN IP in setup when connected; disable the fallback access point as soon as Wi-Fi connects.

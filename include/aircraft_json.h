@@ -9,7 +9,7 @@ template<size_t N> void copyText(char (&dest)[N],JsonVariantConst v) {
     std::snprintf(dest,N,"%s",s);
     size_t n=std::strlen(dest); while(n && dest[n-1]==' ') dest[--n]=0;
 }
-inline bool parseAircraft(JsonDocument &doc,Snapshot &out,double lat,double lon,uint32_t now,Filter filter=Filter::All) {
+inline bool parseAircraft(JsonDocument &doc,Snapshot &out,double lat,double lon,uint32_t now,Filter filter=Filter::All,int altitudeFilter=0,const Watches &watches=Watches{}) {
     JsonArrayConst array=doc["ac"].as<JsonArrayConst>();
     if(array.isNull()) return false;
     out.count=0;
@@ -34,11 +34,12 @@ inline bool parseAircraft(JsonDocument &doc,Snapshot &out,double lat,double lon,
         a.position=project(alat,alon,lat,lon); a.positionAge=seen; a.received=now;
         a.altitude=number(o["alt_baro"]); if(!std::isfinite(a.altitude)) a.altitude=number(o["alt_geom"]);
         a.speed=number(o["gs"]); a.track=number(o["track"]); a.verticalRate=number(o["baro_rate"]);
-        if(distance(a.position)>100) continue;
+        if(distance(a.position)>100 || (altitudeFilter && altitudeBand(a.altitude)!=altitudeFilter)) continue;
+        auto priority=[&](const Aircraft &v) { return distance(v.position)+(watched(v,watches)?0:1000); };
         size_t at=out.count;
         if(at==maxAircraft) {
-            at=0; for(size_t i=1;i<out.count;++i) if(distance(out.aircraft[i].position)>distance(out.aircraft[at].position)) at=i;
-            if(distance(a.position)>=distance(out.aircraft[at].position)) continue;
+            at=0; for(size_t i=1;i<out.count;++i) if(priority(out.aircraft[i])>priority(out.aircraft[at])) at=i;
+            if(priority(a)>=priority(out.aircraft[at])) continue;
         } else ++out.count;
         out.aircraft[at]=a;
     }

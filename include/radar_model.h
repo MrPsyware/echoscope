@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include "watchlist.h"
 
 namespace sky {
 constexpr double pi = 3.14159265358979323846;
@@ -47,6 +48,21 @@ struct Aircraft {
     uint32_t received = 0;
 };
 inline bool matches(const Aircraft &a,Filter filter) { return filter==Filter::All || (filter==Filter::Military?a.military:a.kind==AircraftKind::Rotorcraft); }
+inline int altitudeBand(float altitude) {
+    return !std::isfinite(altitude)?5:altitude<5000?1:altitude<15000?2:altitude<30000?3:4;
+}
+inline const char *altitudeLabel(int band) {
+    const char *names[]={"ALL ALT","<5k ft","5-15k ft","15-30k ft","30k+ ft","ALT UNKNOWN"};
+    return names[std::max(0,std::min(5,band))];
+}
+inline uint32_t altitudeColor(float altitude) {
+    const uint32_t colors[]={0x68F3AE,0x68F3AE,0x62D8F5,0x819FFF,0xD59AF5,0x63958E};
+    return colors[altitudeBand(altitude)];
+}
+inline bool watched(const Aircraft &a,const Watches &w) {
+    return (w.military && a.military) || (w.rotorcraft && a.kind==AircraftKind::Rotorcraft) ||
+        w.types.matches(a.type,true) || w.registrations.matches(a.registration) || w.callsigns.matches(a.callsign);
+}
 struct Snapshot { std::array<Aircraft,maxAircraft> aircraft{}; size_t count = 0; };
 inline float age(const Aircraft &a,uint32_t now) { return a.positionAge + uint32_t(now-a.received)/1000.0f; }
 // Histories live separately from feed snapshots; the device allocates these in
@@ -81,18 +97,28 @@ struct Model {
     char selected[12]{};
     int rangeIndex = 2;
     Filter filter=Filter::All;
-    bool selectMode = false;
+    bool selectMode = false, altitudeMode=false;
+    int altitudeFilter=0;
+    Watches watches;
     bool details = false;
     bool demo = true;
     bool hasUpdate = false;
     uint32_t lastUpdate = 0;
     float range() const { return ranges[rangeIndex]; }
     void reset() {
-        data.count=0; selected[0]=0; rangeIndex=2; filter=Filter::All; selectMode=false;
+        data.count=0; selected[0]=0; rangeIndex=2; filter=Filter::All; selectMode=false; altitudeMode=false; altitudeFilter=0;
         details=false; demo=true; hasUpdate=false; lastUpdate=0;
         if(trails) for(size_t i=0;i<maxAircraft;++i) trails[i].clear();
     }
-    bool visible(const Aircraft &a,uint32_t now) const { return matches(a,filter) && distance(a.position)<=range() && age(a,now)<=60; }
+    bool visible(const Aircraft &a,uint32_t now) const { return matches(a,filter) && (!altitudeFilter || altitudeBand(a.altitude)==altitudeFilter) && distance(a.position)<=range() && age(a,now)<=60; }
+    bool watchAlert(uint32_t now) const {
+        if(demo) return false;
+        for(size_t i=0;i<data.count;++i) {
+            const auto &a=data.aircraft[i];
+            if(visible(a,now) && age(a,now)<=20 && watched(a,watches)) return true;
+        }
+        return false;
+    }
     Aircraft *selection() {
         for(size_t i=0;i<data.count;++i) if(!std::strcmp(data.aircraft[i].hex,selected)) return &data.aircraft[i];
         return nullptr;
@@ -136,6 +162,7 @@ struct Model {
     }
     void rotate(int delta,uint32_t now) {
         if(!delta) return;
+        if(!details && altitudeMode) { altitudeFilter=((altitudeFilter+delta)%6+6)%6; refresh(now); return; }
         if(!details && !selectMode) {
             rangeIndex=std::max(0,std::min(4,rangeIndex+delta)); refresh(now); return;
         }
@@ -152,7 +179,10 @@ struct Model {
     void cycleFilter(uint32_t now) { filter=Filter((int(filter)+1)%3); details=false; refresh(now); }
     void press(uint32_t now) {
         if(details) { details=false; refresh(now); return; }
-        selectMode=!selectMode; refresh(now);
+        if(altitudeMode) altitudeMode=false;
+        else if(selectMode) { selectMode=false; altitudeMode=true; }
+        else selectMode=true;
+        refresh(now);
     }
     void openSelected(uint32_t now) {
         normaliseSelection(now);

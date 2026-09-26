@@ -8,7 +8,7 @@ inline bool setupExpired(uint32_t now,uint32_t opened) {
 
 struct Activity {
     static constexpr uint32_t filterTimeout=10000, sleepTimeout=3600000;
-    uint32_t lastActivity=0,lastTouch=0;
+    uint32_t lastActivity=0,lastTouch=0, sleepAfterMs=sleepTimeout;
     bool sleeping=false,filterVisible=true;
     bool interact(uint32_t now,bool touch=false) {
         const bool woke=sleeping; sleeping=false; lastActivity=now;
@@ -18,7 +18,7 @@ struct Activity {
     bool tick(uint32_t now,bool held=false) {
         if(held) lastActivity=now;
         if(uint32_t(now-lastTouch)>=filterTimeout) filterVisible=false;
-        if(!sleeping && uint32_t(now-lastActivity)>=sleepTimeout) { sleeping=true; return true; }
+        if(!sleeping && sleepAfterMs && uint32_t(now-lastActivity)>=sleepAfterMs) { sleeping=true; return true; }
         return false;
     }
     bool tapFilter(uint32_t now) {
