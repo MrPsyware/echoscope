@@ -195,3 +195,21 @@ Hold for five seconds and open the displayed setup address to configure:
 Visible watch matches have a small green ring. A bold outer ring pulses while any matching aircraft has a position no older than 20 seconds. Alerts respect the selected range and filters, stop when positions age or leave coverage, and never trigger for demo data. Watch matches receive priority when retaining the nearest 64 matching aircraft. Monitoring pauses during sleep; alerts do not wake the screen. Saved watch rules and display settings survive reboot. Flight details still open by touch and return with a click/tap.
 
 Satellite tracking is not included: it would require a separate orbital feed and position calculations, rather than the adsb.fi aircraft feed.
+
+
+### Wireless updates and network monitoring (0.5.0)
+
+Install this version once over USB with `make upload PORT=/dev/ttyACM0`. The existing 16 MB flash layout already contains two 6.25 MiB application slots, so no repartitioning or settings reset is needed.
+
+For later wireless updates, hold the knob for five seconds to unlock setup, then run from your checkout:
+
+```sh
+make upload IP=192.168.2.151
+make monitor IP=192.168.2.151
+```
+
+Upload builds the application, verifies the target protocol and available partition size, and sends it to the inactive slot over local HTTP. The device checks the ESP32-S3 application header, exact byte count and MD5 checksum before selecting the new firmware and rebooting. Interrupted or invalid transfers do not select the incomplete image. A syntactically valid firmware with a runtime bug is not automatically rolled back; keep USB available for recovery. Physical setup unlock is required for every upload session (the existing five-minute window). If the build takes longer, hold again and retry. Only upload trusted EchoScope application firmware, never a merged image. This LAN service is not intended for Internet exposure.
+
+Network monitoring is read-only and does not need setup unlocked. It replays up to 8 KiB of recent application diagnostics, then polls for new logs; it reconnects after Wi-Fi loss/reboot and reports overwritten log data. Feed, TLS, input, power and display diagnostics are included. ROM/bootloader, panic output and Arduino/SDK internal logs still require USB. Feed requests can delay log delivery because the HTTP server shares the network loop. Monitoring does not wake the display; sleep still pauses aircraft requests.
+
+Omit `IP` to retain USB upload/monitoring. USB app upload also resets OTA selection to app0, so it works after previous wireless updates while preserving Wi-Fi/location/watchlist settings. Docker is not involved. Dotted IPv4 addresses are preferred; commas are normalized for convenience.

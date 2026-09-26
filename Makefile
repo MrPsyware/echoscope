@@ -5,6 +5,8 @@ PYTHON ?= python3
 DOCKER ?= docker
 PORT ?= /dev/ttyACM0
 BAUD ?= 115200
+IP ?=
+export IP
 ENV ?= echoscope
 VENV := $(CURDIR)/.tools/venv
 PY := $(VENV)/bin/python
@@ -26,6 +28,8 @@ help:
 	  '  make upload      Build and flash app only (preserves existing settings)' \
 	  '  make flash-full  Build and flash merged image (first installation)' \
 	  '  make monitor     Open the serial monitor; quit with Ctrl+C' \
+	  '  make upload IP=192.168.2.151   Wireless app update (unlock setup first)' \
+	  '  make monitor IP=192.168.2.151  Follow application logs over Wi-Fi' \
 	  '  make ports       List available serial devices' \
 	  '  make backup      Save a timestamped 16 MB backup under .backups/' \
 	  '  make docker      Build/start the photo service on 0.0.0.0:8086' \
@@ -52,15 +56,25 @@ test: deps
 	.tools/tests/json_test
 	$(CXX) -std=c++17 -Wall -Wextra -Werror -I include tests/photo_test.cpp -o .tools/tests/photo_test
 	.tools/tests/photo_test
+	"$(PY)" tests/network_device_test.py
 firmware: build
 	"$(PY)" scripts/package_firmware.py --environment "$(ENV)"
+ifneq ($(strip $(IP)),)
+upload: firmware
+	"$(PY)" scripts/network_device.py upload
+else
 upload: flash
+endif
 flash: firmware
-	"$(PY)" -m esptool --chip esp32s3 --port "$(PORT)" write_flash 0x10000 dist/echoscope-app.bin
+	"$(PY)" -m esptool --chip esp32s3 --port "$(PORT)" write_flash 0xe000 "$(PLATFORMIO_CORE_DIR)/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" 0x10000 dist/echoscope-app.bin
 flash-full: firmware
 	"$(PY)" -m esptool --chip esp32s3 --port "$(PORT)" write_flash 0x0 dist/echoscope-merged.bin
 monitor: setup
+ifneq ($(strip $(IP)),)
+	"$(PY)" scripts/network_device.py monitor
+else
 	"$(PIO)" device monitor --port "$(PORT)" --baud "$(BAUD)"
+endif
 ports: setup
 	"$(PIO)" device list
 backup: setup

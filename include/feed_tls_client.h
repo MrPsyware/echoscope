@@ -1,4 +1,5 @@
 #pragma once
+#include "network_log.h"
 #include <WiFiClientSecure.h>
 #include <mbedtls/ssl.h>
 
@@ -28,11 +29,11 @@ public:
         const int result=ssl_starttls_handshake(sslclient.get());
         sslclient->last_error=result;
         if(result<0) {
-            Serial.printf("[tls] %s: error=%d, stage=%d, elapsed=%lu ms\n",host,result,
+            deviceLog.printf("[tls] %s: error=%d, stage=%d, elapsed=%lu ms\n",host,result,
                           sslclient->ssl_ctx.MBEDTLS_PRIVATE(state),(unsigned long)(millis()-started));
             stop(); return 0;
         }
-        Serial.printf("[tls] %s: verified %s / %s\n",host,
+        deviceLog.printf("[tls] %s: verified %s / %s\n",host,
                       mbedtls_ssl_get_version(&sslclient->ssl_ctx),mbedtls_ssl_get_ciphersuite(&sslclient->ssl_ctx));
         return 1;
     }

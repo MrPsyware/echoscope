@@ -1,5 +1,8 @@
 #include "network_policy.h"
 #include <Arduino.h>
+#include "network_log.h"
+#include <Update.h>
+#include <esp_ota_ops.h>
 #include <esp_lcd_panel_io.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -55,7 +58,7 @@ void IRAM_ATTR encoderISR() {
 }
 void status(const char *message) {
     static char previous[80]{};
-    if(std::strcmp(previous,message)) { Serial.printf("[network] %s\n",message); snprintf(previous,sizeof(previous),"%s",message); }
+    if(std::strcmp(previous,message)) { deviceLog.printf("[network] %s\n",message); snprintf(previous,sizeof(previous),"%s",message); }
     lvgl_port_lock(-1); snprintf(ui::status,sizeof(ui::status),"%s",message); lvgl_port_unlock();
 }
 struct ButtonEvent { sky::ButtonDebounce::Event kind; uint32_t at; bool longPress; };
@@ -79,15 +82,15 @@ void sampleButton(void *) {
 void applyBrightness() {
     const uint8_t value=uint8_t((brightness*255+50)/100);
     const auto result=esp_lcd_panel_io_tx_param(board->getLCD()->getBus()->getControlPanelHandle(),0x02005100,&value,1);
-    if(result!=ESP_OK) Serial.printf("[power] Brightness command failed: %d\n",result);
+    if(result!=ESP_OK) deviceLog.printf("[power] Brightness command failed: %d\n",result);
 }
 bool wakeForInput(uint32_t now,bool touch=false) {
     if(!ui::activity.interact(now,touch)) return false;
     ui::asleep=false; ui::input=sky::InputGate{};
-    if(!board->getLCD()->setDisplayOnOff(true)) Serial.println("[power] Display wake command failed");
+    if(!board->getLCD()->setDisplayOnOff(true)) deviceLog.println("[power] Display wake command failed");
     applyBrightness();
     ui::requestFeed=true;
-    Serial.println("[power] Awake; refreshing aircraft");
+    deviceLog.println("[power] Awake; refreshing aircraft");
     return true;
 }
 void controls(lv_timer_t *) {
@@ -115,22 +118,22 @@ void controls(lv_timer_t *) {
             wakeForInput(millis());
             if(wakeButton) { wakeButton=false; continue; }
             ui::input.buttonEnd(event.at,event.longPress);
-            Serial.printf("[input] Button released; long=%s, touch overlap=%s\n",
+            deviceLog.printf("[input] Button released; long=%s, touch overlap=%s\n",
                           event.longPress?"yes":"no",(ui::input.touchedDuringPress || ui::input.touching)?"yes":"no");
         } else if(event.kind==sky::ButtonDebounce::Hold && !wakeButton) requestPortal=true;
     }
     if(ui::input.takeClick(millis())) {
         if(ui::settings) ui::settings=false;
         else ui::model.press(now);
-        Serial.printf("[input] Click accepted; rotation=%s\n",ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
+        deviceLog.printf("[input] Click accepted; rotation=%s\n",ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
     }
     if(ui::activity.tick(millis(),ui::input.touching || ui::input.buttonHeld || wakeButton)) {
         ui::asleep=true;
         if(!board->getLCD()->setDisplayOnOff(false)) {
             lv_canvas_fill_bg(ui::canvas,lv_color_black(),LV_OPA_COVER);
-            Serial.println("[power] Display off command failed; using black screen");
+            deviceLog.println("[power] Display off command failed; using black screen");
         }
-        Serial.println("[power] Sleeping after one hour idle; feed paused");
+        deviceLog.println("[power] Idle sleep; feed paused");
     }
 }
 void touch(lv_event_t *event) {
@@ -193,6 +196,88 @@ void testPhotoService() {
     JsonDocument doc; const String body=code==200 && http.getSize()>0 && http.getSize()<512?http.getString():String("");
     const bool ok=!deserializeJson(doc,body) && doc["service"]=="echoscope-photos" && doc["protocol"]==1;
     http.end(); server.send(ok?200:502,"text/plain",ok?"Photo service connected (protocol 1).":"Cannot reach a compatible photo service. Check its LAN IP and port.");
+}
+bool updateAccepted=false,updateComplete=false;
+size_t updateExpected=0,updateWritten=0,updateHeaderSize=0;
+uint8_t updateHeader[36]{};
+String updateError;
+void maintenanceInfo() {
+    if(!portal) { server.send(403,"text/plain","Hold the knob for 5 seconds to unlock wireless upload, then retry."); return; }
+    const auto *partition=esp_ota_get_next_update_partition(nullptr);
+    server.sendHeader("Cache-Control","no-store");
+    server.send(200,"application/json","{\"device\":\"echoscope\",\"protocol\":1,\"token\":\""+csrf+"\",\"capacity\":"+String(partition?partition->size:0)+"}");
+}
+void uploadFirmwareChunk() {
+    auto &upload=server.upload();
+    if(upload.status==UPLOAD_FILE_START) {
+        updateAccepted=false; updateComplete=false; updateError=""; updateWritten=0; updateHeaderSize=0;
+        if(!portal || server.header("X-EchoScope-Token")!=csrf) { updateError="Unlock setup before uploading"; return; }
+        const String size=server.header("X-Firmware-Size"),md5=server.header("X-Firmware-MD5");
+        char *end=nullptr; updateExpected=strtoul(size.c_str(),&end,10);
+        const auto *partition=esp_ota_get_next_update_partition(nullptr);
+        bool validMD5=md5.length()==32;
+        for(char c:md5) if(!isxdigit(static_cast<unsigned char>(c))) validMD5=false;
+        if(size.isEmpty() || !end || *end || !partition || updateExpected<36 || updateExpected>partition->size || !validMD5) {
+            updateError="Invalid image size/checksum or no OTA partition"; return;
+        }
+        if(!Update.begin(updateExpected,U_FLASH) || !Update.setMD5(md5.c_str())) {
+            updateError=Update.errorString(); Update.abort(); return;
+        }
+        updateAccepted=true;
+        status("Uploading firmware..."); deviceLog.println("[update] Upload started; aircraft requests paused");
+    } else if(upload.status==UPLOAD_FILE_WRITE && updateAccepted) {
+        size_t offset=0;
+        if(upload.currentSize>updateExpected-updateWritten) {
+            updateError="Image exceeds declared size"; Update.abort(); updateAccepted=false; return;
+        }
+        if(updateHeaderSize<sizeof(updateHeader)) {
+            const size_t n=std::min(upload.currentSize,sizeof(updateHeader)-updateHeaderSize);
+            memcpy(updateHeader+updateHeaderSize,upload.buf,n); updateHeaderSize+=n; offset=n;
+            if(updateHeaderSize==sizeof(updateHeader)) {
+                // Reject merged images/bootloaders and non-S3 firmware before committing.
+                if(updateHeader[0]!=0xE9 || updateHeader[12]!=9 || updateHeader[13]!=0 ||
+                   updateHeader[32]!=0x32 || updateHeader[33]!=0x54 || updateHeader[34]!=0xCD || updateHeader[35]!=0xAB) {
+                    updateError="Expected ESP32-S3 application image (not merged/bootloader)";
+                    Update.abort(); updateAccepted=false; return;
+                }
+                if(Update.write(updateHeader,sizeof(updateHeader))!=sizeof(updateHeader)) {
+                    updateError=Update.errorString(); Update.abort(); updateAccepted=false; return;
+                }
+            }
+        }
+        const size_t remaining=upload.currentSize-offset;
+        if(remaining && Update.write(upload.buf+offset,remaining)!=remaining) {
+            updateError=Update.errorString(); Update.abort(); updateAccepted=false;
+        } else updateWritten+=upload.currentSize;
+    } else if(upload.status==UPLOAD_FILE_END && updateAccepted) {
+        updateComplete=updateWritten==updateExpected && Update.end();
+        if(!updateComplete) { updateError=updateWritten!=updateExpected?"Incomplete firmware image":Update.errorString(); Update.abort(); }
+        updateAccepted=false;
+    } else if(upload.status==UPLOAD_FILE_ABORTED) {
+        if(updateAccepted) Update.abort();
+        updateAccepted=false; updateComplete=false; updateError="Upload interrupted";
+        deviceLog.println("[update] Upload interrupted; current firmware retained");
+    }
+}
+void finishFirmwareUpload() {
+    if(!updateComplete) {
+        server.send(400,"text/plain",updateError.isEmpty()?"No complete firmware received":updateError);
+        status("Firmware upload failed"); return;
+    }
+    server.send(200,"text/plain","Firmware verified; rebooting EchoScope.");
+    deviceLog.println("[update] Image verified; rebooting");
+    delay(500); ESP.restart();
+}
+void networkLogs() {
+    uint64_t cursor=strtoull(server.arg("since").c_str(),nullptr,10);
+    char chunk[1025]; bool lost=false;
+    const size_t n=deviceLog.read(cursor,chunk,1024,lost); chunk[n]=0;
+    char next[24]; snprintf(next,sizeof(next),"%llu",(unsigned long long)cursor);
+    server.sendHeader("Cache-Control","no-store");
+    static const String bootId=String(esp_random(),HEX);
+    server.sendHeader("X-Log-Boot",bootId);
+    server.sendHeader("X-Log-Cursor",next); server.sendHeader("X-Log-Lost",lost?"1":"0");
+    server.send(200,"text/plain",String(chunk,n));
 }
 void setupPage() {
     if(!portal) { server.send(403,"text/plain","Hold the knob for 5 seconds to enable setup."); return; }
@@ -281,7 +366,7 @@ void startFallbackAP() {
     WiFi.mode(WIFI_AP_STA);
     if(!WiFi.softAP("EchoScope-Setup",ui::setupPassword)) { status("Setup Wi-Fi failed"); return; }
     dns.start(53,"*",WiFi.softAPIP()); apActive=true;
-    Serial.println("[network] Fallback AP enabled");
+    deviceLog.println("[network] Fallback AP enabled");
 }
 void openPortal() {
     startFallbackAP();
@@ -296,7 +381,7 @@ void logFeedBytes(const char *label,const char *value,size_t length) {
         const unsigned char c=value[i]; preview[i]=(c>=32 && c<127)?char(c):' ';
     }
     preview[n]=0;
-    Serial.printf("[feed] %s: %s%s\n",label,preview,length>n?" ...":"");
+    deviceLog.printf("[feed] %s: %s%s\n",label,preview,length>n?" ...":"");
 }
 void logFeedText(const char *label,const String &value) {
     logFeedBytes(label,value.c_str(),value.length());
@@ -383,43 +468,43 @@ void fetchPhoto() {
         photoRetryAt=millis()+60000;
         lvgl_port_lock(-1); snprintf(ui::photoStatus,sizeof(ui::photoStatus),"%s",code==404?"No photo available":"Photo service unavailable"); lvgl_port_unlock();
     }
-    Serial.printf("[photo] %s HTTP=%d %s\n",reg,code,ok?"ready":"unavailable/discarded");
+    deviceLog.printf("[photo] %s HTTP=%d %s\n",reg,code,ok?"ready":"unavailable/discarded");
 }
 void fetch() {
     if(ui::asleep.load()) return;
     if(time(nullptr)<1700000000) { status("Waiting for clock sync"); nextFetch=millis()+5000; return; }
     IPAddress address;
     if(WiFi.hostByName("opendata.adsb.fi",address)!=1) {
-        Serial.printf("[feed] DNS lookup failed; Wi-Fi status=%d, RSSI=%d dBm\n",int(WiFi.status()),WiFi.RSSI());
+        deviceLog.printf("[feed] DNS lookup failed; Wi-Fi status=%d, RSSI=%d dBm\n",int(WiFi.status()),WiFi.RSSI());
         status("DNS lookup failed");
         retryDelay=std::min(uint32_t(120000),retryDelay*2); nextFetch=millis()+retryDelay;
-        Serial.printf("[feed] DNS failed; next attempt in %lu ms\n",(unsigned long)retryDelay); return;
+        deviceLog.printf("[feed] DNS failed; next attempt in %lu ms\n",(unsigned long)retryDelay); return;
     }
-    Serial.printf("[feed] Connecting; UTC=%lld, free heap=%u, largest internal block=%u\n",
+    deviceLog.printf("[feed] Connecting; UTC=%lld, free heap=%u, largest internal block=%u\n",
                   (long long)time(nullptr),ESP.getFreeHeap(),
                   heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
-    Serial.printf("[feed] DNS IPv4=%s, RSSI=%d dBm\n",address.toString().c_str(),WiFi.RSSI());
+    deviceLog.printf("[feed] DNS IPv4=%s, RSSI=%d dBm\n",address.toString().c_str(),WiFi.RSSI());
     FeedTLSClient client; client.setCACert(apiRootCA); client.setHandshakeTimeout(15);
     HTTPClient http; http.setConnectTimeout(10000); http.setTimeout(5000); http.useHTTP10(true);
     String url="https://opendata.adsb.fi/api/v3/lat/"+String(homeLat,6)+"/lon/"+String(homeLon,6)+"/dist/54";
-    if(!http.begin(client,url)) { Serial.println("[feed] HTTP begin failed; retry in 15000 ms"); status("Cannot open data feed"); nextFetch=millis()+15000; return; }
+    if(!http.begin(client,url)) { deviceLog.println("[feed] HTTP begin failed; retry in 15000 ms"); status("Cannot open data feed"); nextFetch=millis()+15000; return; }
     const char *headers[]={"Content-Type","Content-Encoding","Transfer-Encoding","Retry-After","Server","CF-Ray"};
     http.collectHeaders(headers,sizeof(headers)/sizeof(headers[0]));
     lvgl_port_lock(-1); const auto fetchFilter=ui::model.filter; const int fetchAltitude=ui::model.altitudeFilter; const auto watches=ui::model.watches; lvgl_port_unlock();
     const uint32_t requestStart=millis();
     const int code=http.GET();
-    Serial.printf("[feed] HTTP=%d, headers after=%lu ms, content length=%d\n",code,
+    deviceLog.printf("[feed] HTTP=%d, headers after=%lu ms, content length=%d\n",code,
                   (unsigned long)(millis()-requestStart),http.getSize());
     bool ok=false;
     if(code==200) {
         // Filter unused fields during decoding; retain raw body for failure diagnostics.
         JsonDocument doc;
         auto body=readFeedBody(http,512*1024,8000);
-        Serial.printf("[feed] Body=%u/%d bytes, read=%lu ms, transport ended=%s, stop=%s\n",
+        deviceLog.printf("[feed] Body=%u/%d bytes, read=%lu ms, transport ended=%s, stop=%s\n",
                       unsigned(body.text.length()),http.getSize(),(unsigned long)body.elapsed,
                       body.complete?"yes":"no",body.reason);
         if(!body.complete) {
-            Serial.printf("[feed] Response incomplete: %s (JSON decode skipped)\n",body.reason);
+            deviceLog.printf("[feed] Response incomplete: %s (JSON decode skipped)\n",body.reason);
             status("Incomplete feed response");
         } else {
             sky::FeedJsonReader reader{body.text.c_str(),body.text.length()};
@@ -427,25 +512,25 @@ void fetch() {
             if(error) {
                 const size_t offset=reader.position?reader.position-1:0;
                 const size_t start=offset>80?offset-80:0;
-                Serial.printf("[feed] JSON stopped near byte %u/%u (zero-based); context starts at %u\n",
+                deviceLog.printf("[feed] JSON stopped near byte %u/%u (zero-based); context starts at %u\n",
                               unsigned(offset),unsigned(body.text.length()),unsigned(start));
                 logFeedBytes("Decode context",body.text.c_str()+start,std::min(size_t(200),body.text.length()-start));
-                Serial.print("[feed] Bytes around stop (hex):");
+                deviceLog.print("[feed] Bytes around stop (hex):");
                 for(size_t i=offset>16?offset-16:0;i<std::min(offset+size_t(17),body.text.length());++i)
-                    Serial.printf(" %02X",static_cast<unsigned char>(body.text[i]));
-                Serial.println();
+                    deviceLog.printf(" %02X",static_cast<unsigned char>(body.text[i]));
+                deviceLog.println();
                 const size_t tail=body.text.length()>200?body.text.length()-200:0;
                 logFeedBytes("Response tail",body.text.c_str()+tail,body.text.length()-tail);
-                Serial.printf("[feed] JSON decode failed: %s; document overflow=%s, free heap=%u, largest internal block=%u\n",error.c_str(),doc.overflowed()?"yes":"no",ESP.getFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
+                deviceLog.printf("[feed] JSON decode failed: %s; document overflow=%s, free heap=%u, largest internal block=%u\n",error.c_str(),doc.overflowed()?"yes":"no",ESP.getFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
                 char message[80]; snprintf(message,sizeof(message),"JSON: %s",error.c_str()); status(message);
             } else if(!sky::parseAircraft(doc,incoming,homeLat,homeLon,millis(),fetchFilter,fetchAltitude,watches)) {
-                Serial.println("[feed] JSON schema error: expected top-level 'ac' array (missing or wrong type)");
+                deviceLog.println("[feed] JSON schema error: expected top-level 'ac' array (missing or wrong type)");
                 status("Feed missing aircraft array");
             } else {
                 lvgl_port_lock(-1);
                 if(ui::model.filter==fetchFilter && ui::model.altitudeFilter==fetchAltitude) ui::model.ingest(incoming,millis());
                 lvgl_port_unlock(); ok=true; status("Live positions");
-                Serial.printf("[feed] Parsed %u entries; kept %u aircraft\n",unsigned(doc["ac"].size()),unsigned(incoming.count));
+                deviceLog.printf("[feed] Parsed %u entries; kept %u aircraft\n",unsigned(doc["ac"].size()),unsigned(incoming.count));
             }
         }
         if(!ok) logFeedBytes("Response prefix",body.text.c_str(),body.text.length());
@@ -453,14 +538,14 @@ void fetch() {
         char msg[80];
         if(code<0) {
             char tlsMessage[192]{}; const int tlsError=client.lastError(tlsMessage,sizeof(tlsMessage));
-            Serial.printf("[feed] HTTP client %d (%s); TLS %d (%s)\n",code,HTTPClient::errorToString(code).c_str(),tlsError,tlsMessage);
+            deviceLog.printf("[feed] HTTP client %d (%s); TLS %d (%s)\n",code,HTTPClient::errorToString(code).c_str(),tlsError,tlsMessage);
             if(tlsError==-80) snprintf(msg,sizeof(msg),"TLS connection reset");
             else if(tlsError==-0x2700) snprintf(msg,sizeof(msg),"TLS certificate rejected");
             else if(tlsError!=0 && tlsError!=-1) snprintf(msg,sizeof(msg),"TLS error %d",tlsError);
             else snprintf(msg,sizeof(msg),"Connection failed (%d)",code);
         } else {
             snprintf(msg,sizeof(msg),"Data feed HTTP %d",code);
-            Serial.printf("[feed] Server returned HTTP %d\n",code);
+            deviceLog.printf("[feed] Server returned HTTP %d\n",code);
             auto body=readFeedBody(http,1024,1000);
             logFeedBytes("Error response prefix",body.text.c_str(),body.text.length());
         }
@@ -468,7 +553,7 @@ void fetch() {
     }
     if(!ok) {
         for(auto header:headers) if(http.hasHeader(header)) logFeedText(header,http.header(header));
-        Serial.printf("[feed] Failure after=%lu ms; Wi-Fi status=%d, RSSI=%d dBm, free heap=%u, largest internal block=%u, free PSRAM=%u\n",
+        deviceLog.printf("[feed] Failure after=%lu ms; Wi-Fi status=%d, RSSI=%d dBm, free heap=%u, largest internal block=%u, free PSRAM=%u\n",
                       (unsigned long)(millis()-requestStart),int(WiFi.status()),WiFi.RSSI(),ESP.getFreeHeap(),
                       heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT),ESP.getFreePsram());
     }
@@ -478,22 +563,22 @@ void fetch() {
         controlTestDone=true;
         // One handshake per boot, no HTTP request or location data to the control host.
         FeedTLSClient control; control.setCACert(apiRootCA); control.setHandshakeTimeout(15);
-        Serial.println("[control] Testing verified TLS to pki.goog");
-        if(control.connect("pki.goog",443,10000)) Serial.println("[control] HTTPS handshake works to other host");
-        else { char error[160]; int n=control.lastError(error,sizeof(error)); Serial.printf("[control] Failed: %d %s\n",n,error); }
+        deviceLog.println("[control] Testing verified TLS to pki.goog");
+        if(control.connect("pki.goog",443,10000)) deviceLog.println("[control] HTTPS handshake works to other host");
+        else { char error[160]; int n=control.lastError(error,sizeof(error)); deviceLog.printf("[control] Failed: %d %s\n",n,error); }
         control.stop();
     }
     retryDelay=ok?5000:std::min(uint32_t(120000),retryDelay*2);
     if(code==429) retryDelay=120000;
-    Serial.printf("[feed] %s; next attempt in %lu ms\n",ok?"Success":"Failed",(unsigned long)retryDelay);
+    deviceLog.printf("[feed] %s; next attempt in %lu ms\n",ok?"Success":"Failed",(unsigned long)retryDelay);
     nextFetch=millis()+retryDelay;
 }
 }
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("EchoScope 0.4.0 / altitude, watchlists and display settings");
-    Serial.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
+    deviceLog.println("EchoScope 0.5.0 / wireless upload and network diagnostics");
+    deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
     photoBase=prefs.getString("photo_url",""); ui::photosEnabled=!photoBase.isEmpty();
@@ -534,7 +619,7 @@ void setup() {
         lv_timer_set_period(timer,std::max(uint32_t(200),renderMs+50));
         static uint32_t lastLog=0;
         if(uint32_t(started-lastLog)>30000) {
-            Serial.printf("[display] core=%d, render=%lu ms, period=%lu ms\n",xPortGetCoreID(),
+            deviceLog.printf("[display] core=%d, render=%lu ms, period=%lu ms\n",xPortGetCoreID(),
                           (unsigned long)renderMs,(unsigned long)std::max(uint32_t(200),renderMs+50));
             lastLog=started;
         }
@@ -550,6 +635,11 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(6),encoderISR,CHANGE); attachInterrupt(digitalPinToInterrupt(5),encoderISR,CHANGE);
     WiFi.mode(WIFI_STA); WiFi.setAutoReconnect(true);
     configTime(0,0,"pool.ntp.org","time.google.com");
+    const char *maintenanceHeaders[]={"X-EchoScope-Token","X-Firmware-Size","X-Firmware-MD5"};
+    server.collectHeaders(maintenanceHeaders,3);
+    server.on("/maintenance",HTTP_GET,maintenanceInfo);
+    server.on("/update",HTTP_POST,finishFirmwareUpload,uploadFirmwareChunk);
+    server.on("/logs",HTTP_GET,networkLogs);
     server.on("/photo",HTTP_GET,photoSource); server.on("/test-photo",HTTP_POST,testPhotoService);
     server.on("/",HTTP_GET,setupPage); server.on("/save",HTTP_POST,saveSetup); server.onNotFound(setupPage); server.begin();
     if(configured) { WiFi.begin(ssid.c_str(),password.c_str()); status("Connecting to Wi-Fi"); }
@@ -562,7 +652,7 @@ void loop() {
     const bool connected=WiFi.status()==WL_CONNECTED;
     if(connected && apActive) {
         dns.stop(); WiFi.softAPdisconnect(true); WiFi.mode(WIFI_STA); apActive=false;
-        Serial.println("[network] Connected to configured Wi-Fi; fallback AP disabled");
+        deviceLog.println("[network] Connected to configured Wi-Fi; fallback AP disabled");
     }
     if(networkPolicy.fallback(configured,connected,now) && !apActive) openPortal();
     updateSetupNetwork();

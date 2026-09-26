@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- Add setup-unlocked LAN firmware upload into the inactive OTA slot, with S3 application-header, size and MD5 validation.
+- Add `make upload IP=...` and reconnecting `make monitor IP=...` with an 8 KiB application-log buffer.
+- Preserve USB commands and reset OTA boot selection during USB app updates.
+
 ## 0.4.0
 
 - Add altitude colours and a third knob mode for altitude-band filtering, including unknown altitude.
