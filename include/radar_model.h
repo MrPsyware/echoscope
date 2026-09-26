@@ -100,7 +100,7 @@ struct Model {
     Snapshot data;
     Trail *trails=nullptr;
     char selected[12]{};
-    int rangeIndex = 2;
+    int rangeIndex = 2, defaultRangeIndex=2;
     Filter filter=Filter::All;
     bool selectMode = false, altitudeMode=false;
     int altitudeFilter=0;
@@ -111,7 +111,7 @@ struct Model {
     uint32_t lastUpdate = 0;
     float range() const { return ranges[rangeIndex]; }
     void reset() {
-        data.count=0; selected[0]=0; rangeIndex=2; filter=Filter::All; selectMode=false; altitudeMode=false; altitudeFilter=0;
+        data.count=0; selected[0]=0; rangeIndex=defaultRangeIndex; filter=Filter::All; selectMode=false; altitudeMode=false; altitudeFilter=0;
         details=false; demo=true; hasUpdate=false; lastUpdate=0;
         if(trails) for(size_t i=0;i<maxAircraft;++i) trails[i].clear();
     }

@@ -62,7 +62,7 @@ Use the serial port your device exposes. The commands use esptool 4.x syntax. Re
 
 Before saving settings, press/tap to explore the labelled demo, then hold the knob to return to setup. Demo aircraft are never substituted for live aircraft after setup. Credentials and location stay in device storage; location is sent to adsb.fi to request nearby aircraft. The setup form never displays the saved Wi-Fi password. A blank password preserves it when retaining the same SSID.
 
-When connected, holding the knob opens setup showing your configured SSID and LAN IP; browse to that IP from the same network. The EchoScope-Setup access point is off while connected. If the configured network is unavailable for 30 seconds, the fallback access point starts and setup shows its credentials/address instead. Opening setup manually while disconnected also starts it. Reconnecting shuts the access point down automatically. Setup access closes five minutes after being opened if Wi-Fi is connected. A failed connection leaves recovery setup available. Holding the knob reopens it. Range and rotation mode reset on reboot; Wi-Fi and location persist.
+When connected, holding the knob opens setup showing your configured SSID and LAN IP; browse to that IP from the same network. The EchoScope-Setup access point is off while connected. If the configured network is unavailable for 30 seconds, the fallback access point starts and setup shows its credentials/address instead. Opening setup manually while disconnected also starts it. Reconnecting shuts the access point down automatically. Setup access closes five minutes after being opened if Wi-Fi is connected. A failed connection leaves recovery setup available. Holding the knob reopens it. Range starts at the configured startup range after reboot; rotation mode resets. Wi-Fi and location persist.
 
 ## Updating an existing installation
 
@@ -172,7 +172,7 @@ After the configured idle period (one hour by default) without touch, press or r
 
 ### Optional aircraft photos (0.3.0)
 
-The [photo service](photo-service/README.md) runs in Docker on another LAN computer. Start it with `make docker` from the repository root (listens on `0.0.0.0:8086`), then hold the knob for 5 seconds to unlock its web setup. Enter `http://YOUR-SERVER-IP:8086` in **Photo service URL**, test and save. Leaving it blank disables photos.
+The [information server](info-service/README.md) runs in Docker on another LAN computer. Start it with `make docker` from the repository root (listens on `0.0.0.0:8086`), then hold the knob for 5 seconds to unlock its web setup. Enter `http://YOUR-SERVER-IP:8086` in **Info server URL**, test and save. Leaving it blank disables photos.
 
 Aircraft details automatically request the actual aircraft's thumbnail by registration when photos are enabled. The same page shows aircraft type, altitude, speed, distance/bearing, track and position age alongside the photo. Turn to select another flight; tap or press to return to radar. Photos retain photographer credit; open `http://KNOB-IP/photo` for the original-photo link. The service does not store photographs on disk. Missing photos and unavailable servers leave the radar usable. New photo requests pause during standby, and obsolete responses are discarded. The firmware accepts only the bounded image protocol; it does not decode JPEGs. See the service README for deployment, provider and protocol details.
 
@@ -194,7 +194,7 @@ Hold for five seconds and open the displayed setup address to configure:
 
 Visible watch matches have a small category-coloured ring. The configurable outer ring activates while any matching aircraft has a position no older than 20 seconds. Alerts respect the selected range and filters, stop when positions age or leave coverage, and never trigger for demo data. Watch matches receive priority when retaining the nearest 64 matching aircraft. Monitoring pauses during sleep; alerts do not wake the screen. Saved watch rules and display settings survive reboot. Flight details still open by touch and return with a click/tap.
 
-Satellite tracking is not included: it would require a separate orbital feed and position calculations, rather than the adsb.fi aircraft feed.
+Space-station predictions are available through the optional information server; they use a separate orbital feed from aircraft data.
 
 
 ### Wireless updates and network monitoring (0.5.0)
@@ -227,3 +227,14 @@ The new defaults are a **30% peak brightness, 3-pixel ring and a gentle 4-second
 - Effect: Off, Steady, Gentle pulse or Flash. Off leaves the small aircraft markers visible.
 
 Appearance settings persist across reboot. Hold five seconds to unlock setup, open the displayed address, adjust and save. Existing watch rules and display settings are retained when upgrading.
+
+
+### Startup range and optional information server (0.6.0)
+
+Set **Startup range** in web setup to 5, 10, 25, 50 or 100 km. The default remains 25 km until changed; normal knob rotation does not overwrite the saved startup choice.
+
+The Docker companion is now **EchoScope Info Server**. Update it with `git pull` and `make docker` on your server, then update the knob firmware. The existing server URL and port work unchanged. See [server setup, sources and options](info-service/README.md).
+
+The server advertises available photos, maps and space-station predictions. Absent features disappear automatically. Flight details use their full text layout until a matching photo has loaded successfully. A faint, range-matched OpenStreetMap background includes visible attribution; a background toggle appears in setup when supported. A **SAT >** radar touch target opens a separate station sky view only when the server has fresh orbital data. Rotate to choose ISS/Tiangong; tap or press to return. Pass times use UTC and a 10° elevation threshold; predictions do not imply naked-eye visibility.
+
+The former `photo-service/` directory is now `info-service/`; `make docker` handles it. The Compose project/service IDs remain unchanged for in-place upgrades. `INFO_PORT` is the new port override; `PHOTO_PORT` still works. No external server is required for the aircraft radar.

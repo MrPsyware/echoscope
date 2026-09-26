@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+- Add a saved startup range in web setup.
+- Expand the Docker companion into EchoScope Info Server with backwards-compatible capability discovery.
+- Hide absent features and use full flight details until a usable photo has loaded.
+- Add a cached, correctly projected faint street-map background with attribution and a capability-dependent toggle.
+- Add ISS/Tiangong sky positions and upcoming 10-degree passes using fresh CelesTrak data and server-side SGP4 calculations.
+- Rename the source directory to info-service while retaining Compose identity and existing server URLs.
+
 ## 0.5.1
 
 - Add saved alert colours for ordinary watchlist, helicopter and military matches.

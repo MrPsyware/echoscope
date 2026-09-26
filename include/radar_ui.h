@@ -2,6 +2,8 @@
 #include <lvgl.h>
 #include <cstdio>
 #include <atomic>
+#include <ctime>
+#include "info_protocol.h"
 #include "radar_model.h"
 #include "input_gate.h"
 #include "activity.h"
@@ -15,7 +17,15 @@ inline sky::Activity activity;
 inline sky::AlertStyle alertStyle;
 inline bool photosEnabled=false,photoReady=false;
 inline char photoReg[16]{},photoCredit[128]{},photoLink[256]{},photoStatus[48]="Loading photo...";
-inline lv_img_dsc_t photoImage{};
+inline lv_img_dsc_t photoImage{},mapImage{};
+inline bool mapsEnabled=false,mapReady=false,mapWanted=true,satellitesEnabled=false,satelliteView=false;
+inline int mapRange=-1,stationIndex=0;
+inline char mapCredit[96]="Copyright OpenStreetMap contributors";
+inline sky::Station stations[8]{};
+inline unsigned stationCount=0;
+inline uint32_t stationReceived=0;
+inline void rotateStations(int delta) { if(stationCount) stationIndex=((stationIndex+delta)%int(stationCount)+int(stationCount))%int(stationCount); }
+
 inline std::atomic<bool> asleep{false};
 inline bool settings=false,setupOpeningTouch=false,setupConnected=false;
 inline char setupSSID[33]{};
@@ -60,6 +70,35 @@ inline void footer(size_t visible) {
     text(424,sky::altitudeLabel(model.altitudeFilter),&lv_font_montserrat_14,
          model.altitudeFilter?sky::altitudeColor(model.altitudeFilter==1?0:model.altitudeFilter==2?5000:model.altitudeFilter==3?15000:model.altitudeFilter==4?30000:NAN):muted);
 }
+inline void renderStations(uint32_t now) {
+    text(35,"SPACE STATIONS",&lv_font_montserrat_22,green);
+    if(!stationCount || uint32_t(now-stationReceived)>30000) {
+        text(193,"Updating predictions...",&lv_font_montserrat_20,muted);
+        text(380,"Tap / press to return",&lv_font_montserrat_14,muted); return;
+    }
+    if(stationIndex>=int(stationCount)) stationIndex=0;
+    const auto &selected=stations[stationIndex];
+    text(70,selected.name,&lv_font_montserrat_18);
+    for(int i=1;i<=3;++i) circle(233,230,130*i/3,grid);
+    line(103,230,363,230,grid); line(233,100,233,360,grid);
+    text(103,"N",&lv_font_montserrat_14,muted);
+    text(224,"W",&lv_font_montserrat_14,muted,88,24); text(224,"E",&lv_font_montserrat_14,muted,354,24);
+    text(341,"S",&lv_font_montserrat_14,muted);
+    bool above=false;
+    for(unsigned i=0;i<stationCount;++i) if(stations[i].el>=0) {
+        above=true; const auto &a=stations[i]; const float r=130*(90-a.el)/90,angle=a.az*sky::pi/180;
+        const int x=233+std::sin(angle)*r,y=230-std::cos(angle)*r;
+        circle(x,y,i==unsigned(stationIndex)?7:4,i==unsigned(stationIndex)?amber:green,2,true);
+    }
+    if(!above) text(223,"Below the horizon",&lv_font_montserrat_16,muted);
+    char label[96]; snprintf(label,sizeof(label),"Az %.0f°  /  El %.0f°  /  %.0f km",selected.az,selected.el,selected.km);
+    text(365,label,&lv_font_montserrat_14,green);
+    const time_t rise=selected.nextRise;
+    if(rise) { struct tm utc; gmtime_r(&rise,&utc); snprintf(label,sizeof(label),"Next 10° rise: %02d:%02d UTC",utc.tm_hour,utc.tm_min); }
+    else snprintf(label,sizeof(label),"No 10° rise in next 24h");
+    text(391,label,&lv_font_montserrat_14,muted);
+    text(420,"Predicted / CelesTrak",&lv_font_montserrat_14,muted);
+}
 inline void render(uint32_t now) {
     model.refresh(now);
     lv_canvas_fill_bg(canvas,lv_color_hex(0x030D10),LV_OPA_COVER);
@@ -78,6 +117,7 @@ inline void render(uint32_t now) {
         text(370,"Press or tap to return",&lv_font_montserrat_16,muted);
         return;
     }
+    if(satelliteView && satellitesEnabled) { renderStations(now); return; }
     const bool stale=!model.demo && (!model.hasUpdate || uint32_t(now-model.lastUpdate)>20000);
     // Attribution remains in setup/details; normal live operation needs no banner.
     if(model.details && (stale || model.demo)) text(22,model.demo?"DEMO":"DATA STALE",&lv_font_montserrat_14,amber);
@@ -89,10 +129,11 @@ inline void render(uint32_t now) {
             text(250,"Turn to select another flight",&lv_font_montserrat_18,muted);
         } else {
             char s[80];
-            text(photosEnabled?44:64,a->callsign[0]?a->callsign:a->hex,&lv_font_montserrat_36);
+            const bool showPhoto=photosEnabled && photoReady && !std::strcmp(photoReg,a->registration);
+            text(showPhoto?44:64,a->callsign[0]?a->callsign:a->hex,&lv_font_montserrat_36);
             std::snprintf(s,sizeof(s),"%s  /  %s",a->registration[0]?a->registration:"--",a->type[0]?a->type:"--");
-            text(photosEnabled?88:109,s,&lv_font_montserrat_20,muted);
-            if(photosEnabled) {
+            text(showPhoto?88:109,s,&lv_font_montserrat_20,muted);
+            if(showPhoto) {
                 // Photo and live telemetry share one page; retain attribution and age.
                 text(116,a->description[0]?a->description:"Aircraft model unavailable",&lv_font_montserrat_14,white,63,340);
                 if(photoReady && !std::strcmp(photoReg,a->registration)) {
@@ -129,11 +170,13 @@ inline void render(uint32_t now) {
         text(426,"Data: adsb.fi",&lv_font_montserrat_14,muted);
         return;
     }
+    const bool drawMap=mapsEnabled && mapWanted && mapReady && mapRange==model.rangeIndex;
+    if(drawMap) { lv_draw_img_dsc_t image; lv_draw_img_dsc_init(&image); lv_canvas_draw_img(canvas,23,23,&mapImage,&image); }
     for(int i=1;i<=4;++i) circle(centre,centre,radius*i/4,grid);
     line(centre-radius,centre,centre+radius,centre,grid);
     line(centre,centre-radius,centre,centre+radius,grid);
     text(48,"N",&lv_font_montserrat_16,muted);
-    text(378,"S",&lv_font_montserrat_14,muted);
+    text(drawMap?357:378,"S",&lv_font_montserrat_14,muted);
     text(225,"W",&lv_font_montserrat_14,muted,38,26);
     text(225,"E",&lv_font_montserrat_14,muted,402,26);
     // Sweep is decorative. Aircraft are always drawn from their last reported position.
@@ -201,6 +244,8 @@ inline void render(uint32_t now) {
     text(36,filterText,&lv_font_montserrat_14,green,128,210);
     }
     if(model.demo && !activity.filterVisible) text(84,"DEMO",&lv_font_montserrat_14,muted);
+    if(drawMap) text(383,mapCredit,&lv_font_montserrat_12,white,58,350);
+    if(satellitesEnabled) text(82,"SAT >",&lv_font_montserrat_14,green,315,70);
     footer(visible);
     const auto alert=model.activeAlert(now);
     const uint8_t opacity=alertStyle.opacity(now);
@@ -210,9 +255,11 @@ inline void render(uint32_t now) {
 }
 inline void tap(int x,int y,uint32_t now) {
     if(settings) { settings=false; return; }
+    if(satelliteView) { satelliteView=false; return; }
     if(model.details) {
         model.details=false; model.refresh(now); return;
     }
+    if(satellitesEnabled && y>=70 && y<=108 && x>=305 && x<=395) { satelliteView=true; return; }
     if(y>=20 && y<67 && x>=128 && x<=338) { if(activity.tapFilter(now)) { model.cycleFilter(now); requestFeed=true; } return; }
     if(y>=400) { model.selectMode=x>=183 && x<283; model.altitudeMode=x>=283; model.refresh(now); return; }
     float east=(x-centre)*model.range()/radius, north=(centre-y)*model.range()/radius;

@@ -32,9 +32,9 @@ help:
 	  '  make monitor IP=192.168.2.151  Follow application logs over Wi-Fi' \
 	  '  make ports       List available serial devices' \
 	  '  make backup      Save a timestamped 16 MB backup under .backups/' \
-	  '  make docker      Build/start the photo service on 0.0.0.0:8086' \
-	  '  make docker-down Stop the photo service' \
-	  '  make docker-logs Follow photo service logs' \
+	  '  make docker      Build/start the info server on 0.0.0.0:8086' \
+	  '  make docker-down Stop the info server' \
+	  '  make docker-logs Follow info server logs' \
 	  '  make clean       Remove build products, retaining tools and backups' \
 	  'Override serial device with PORT=/dev/ttyACM1; monitor baud with BAUD=115200.'
 
@@ -84,8 +84,8 @@ clean:
 	$(PYTHON) scripts/clean.py
 
 docker:
-	$(DOCKER) compose -f photo-service/compose.yaml up -d --build
+	$(DOCKER) compose -f info-service/compose.yaml up -d --build
 docker-down:
-	$(DOCKER) compose -f photo-service/compose.yaml down
+	$(DOCKER) compose -f info-service/compose.yaml down
 docker-logs:
-	$(DOCKER) compose -f photo-service/compose.yaml logs -f
+	$(DOCKER) compose -f info-service/compose.yaml logs -f

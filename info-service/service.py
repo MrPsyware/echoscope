@@ -1,5 +1,7 @@
 """EchoScope LAN photo adapter. No photographs are stored on disk."""
 import html
+import os
+import extras
 import io
 import json
 import re
@@ -13,11 +15,12 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError
 from PIL import Image
 
-USER_AGENT = 'EchoScope/0.3.0 (+https://github.com/MrPsyware/echoscope)'
+USER_AGENT = 'EchoScope/0.6.0 (+https://github.com/MrPsyware/echoscope)'
 REG = re.compile(r'[A-Z0-9][A-Z0-9-]{0,14}\Z')
 CACHE = OrderedDict()
 LOCK = threading.Lock()
 GATE = threading.BoundedSemaphore(2)
+SAT_QUERY_LOCK = threading.Lock()
 NEXT_LOOKUP = 0.0
 WIDTH, HEIGHT = 200, 150
 HEADER = struct.Struct('<4sHH128s256s')
@@ -101,12 +104,35 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlsplit(self.path).path
         if path == '/health':
-            return self.reply(200, b'{"service":"echoscope-photos","protocol":1}', 'application/json')
+            body = {'service': 'echoscope-photos', 'name': 'EchoScope Info Server', 'protocol': 1,
+                    'capabilities': {'photos': os.environ.get('ENABLE_PHOTOS', '1') == '1',
+                                     'maps': extras.MAPS, 'satellites': bool(extras.available_satellites())},
+                    'map_credit': extras.MAP_CREDIT}
+            return self.reply(200, json.dumps(body).encode(), 'application/json')
+        if path in ('/v1/map', '/v1/satellites'):
+            if (path.endswith('map') and not extras.MAPS) or (path.endswith('satellites') and not extras.available_satellites()):
+                return self.reply(404, b'Capability unavailable', 'text/plain')
+            if not GATE.acquire(blocking=False):
+                return self.reply(503, b'Busy', 'text/plain')
+            try:
+                lat, lon, query = extras.location(urlsplit(self.path).query)
+                if path.endswith('map'):
+                    code, body = extras.map_response(lat, lon, int(query['range'][0]), download)
+                    return self.reply(code, body, 'application/octet-stream')
+                with SAT_QUERY_LOCK:
+                    body = json.dumps(extras.satellite_response(lat, lon)).encode()
+                return self.reply(200, body, 'application/json')
+            except (ValueError, KeyError, OSError, TypeError):
+                return self.reply(400, b'Invalid query or unavailable data', 'text/plain')
+            finally:
+                GATE.release()
         if path == '/':
-            return self.reply(200, b'<h1>EchoScope photos</h1><p>Service ready. Set this server URL in EchoScope setup.</p><p>Photo credits and original links: /photo/REGISTRATION</p>', 'text/html; charset=utf-8')
+            return self.reply(200, b'<h1>EchoScope Info Server</h1><p>Photos, maps and station predictions. Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>. Orbits: CelesTrak / SGP4.</p><p>Service ready. Set this server URL in EchoScope setup.</p><p>Photo credits and original links: /photo/REGISTRATION</p>', 'text/html; charset=utf-8')
         binary = path.startswith('/v1/photo/')
         if not binary and not path.startswith('/photo/'):
             return self.reply(404, b'Not found', 'text/plain')
+        if os.environ.get('ENABLE_PHOTOS', '1') != '1':
+            return self.reply(404, b'Photos disabled', 'text/plain')
         reg = path.rsplit('/', 1)[-1].upper()
         if not REG.fullmatch(reg):
             return self.reply(400, b'Invalid registration', 'text/plain')
@@ -127,4 +153,5 @@ class Handler(BaseHTTPRequestHandler):
             GATE.release()
 
 if __name__ == '__main__':
+    extras.start(download)
     ThreadingHTTPServer(('0.0.0.0', 8086), Handler).serve_forever()

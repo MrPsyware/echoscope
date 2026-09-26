@@ -33,12 +33,16 @@ DNSServer dns;
 esp_panel::board::Board *board;
 String ssid,password,csrf,photoBase;
 String watchTypes,watchRegs,watchCalls;
-unsigned brightness=100,sleepMinutes=60;
+unsigned brightness=100,sleepMinutes=60,startRange=2;
 bool watchMilitary=false,watchRotor=false;
 sky::AlertStyle savedAlertStyle;
 uint32_t photoRetryAt=0;
 char photoAttempt[16]{};
-lv_color_t *photoPixels=nullptr;
+lv_color_t *photoPixels=nullptr,*mapPixels=nullptr;
+bool capsPhotos=false,capsMaps=false,capsSatellites=false,mapWanted=true;
+uint32_t nextCapabilities=0,nextMap=0,nextStations=0;
+int requestedMapRange=-1;
+
 double homeLat=0,homeLon=0;
 bool configured=false,portal=false,apActive=false;
 sky::NetworkPolicy networkPolicy;
@@ -105,7 +109,7 @@ void controls(lv_timer_t *) {
     remainder+=steps;
     if(std::abs(remainder)>=transitionsPerDetent) {
         const int previousBand=ui::model.altitudeFilter;
-        if(!ui::settings) ui::model.rotate(remainder/transitionsPerDetent,now);
+        if(!ui::settings) { if(ui::satelliteView) ui::rotateStations(remainder/transitionsPerDetent); else ui::model.rotate(remainder/transitionsPerDetent,now); }
         if(previousBand!=ui::model.altitudeFilter) ui::requestFeed=true;
         remainder%=transitionsPerDetent;
     }
@@ -125,6 +129,7 @@ void controls(lv_timer_t *) {
     }
     if(ui::input.takeClick(millis())) {
         if(ui::settings) ui::settings=false;
+        else if(ui::satelliteView) ui::satelliteView=false;
         else ui::model.press(now);
         deviceLog.printf("[input] Click accepted; rotation=%s\n",ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
     }
@@ -196,7 +201,18 @@ void testPhotoService() {
     http.begin(client,url+"/health"); const int code=http.GET();
     JsonDocument doc; const String body=code==200 && http.getSize()>0 && http.getSize()<512?http.getString():String("");
     const bool ok=!deserializeJson(doc,body) && doc["service"]=="echoscope-photos" && doc["protocol"]==1;
-    http.end(); server.send(ok?200:502,"text/plain",ok?"Photo service connected (protocol 1).":"Cannot reach a compatible photo service. Check its LAN IP and port.");
+    http.end();
+    String result="Cannot reach a compatible information server. Check its LAN IP and port.";
+    if(ok) {
+        const bool legacy=doc["capabilities"].isNull();
+        result="Info server connected. Available:";
+        if(legacy || doc["capabilities"]["photos"]==true) result+=" photos";
+        if(doc["capabilities"]["maps"]==true) result+=" maps";
+        if(doc["capabilities"]["satellites"]==true) result+=" space stations";
+        if(!legacy && doc["capabilities"]["photos"]!=true && doc["capabilities"]["maps"]!=true && doc["capabilities"]["satellites"]!=true) result+=" none currently";
+        result+=".";
+    }
+    server.send(ok?200:502,"text/plain",result);
 }
 bool updateAccepted=false,updateComplete=false;
 size_t updateExpected=0,updateWritten=0,updateHeaderSize=0;
@@ -295,6 +311,9 @@ void setupPage() {
     page+="<label>Wi-Fi password</label><input name='password' type='password' maxlength='63' autocomplete='new-password' placeholder='Leave blank to keep saved password'>";
     page+="<label>Latitude</label><input name='lat' type='number' step='any' min='-90' max='90' required value='"+(configured?String(homeLat,6):String(""))+"'>";
     page+="<label>Longitude</label><input name='lon' type='number' step='any' min='-180' max='180' required value='"+(configured?String(homeLon,6):String(""))+"'>";
+    page+="<label>Startup range</label><select name='start_range' style='width:100%;padding:13px;font:inherit'>";
+    for(int i=0;i<5;++i) page+="<option value='"+String(i)+"' "+String(unsigned(i)==startRange?"selected":"")+">"+String(int(sky::ranges[i]))+" km</option>";
+    page+="</select>";
     page+="<h2>Display</h2><label>Brightness (%)</label><input name='brightness' type='number' min='5' max='100' required value='"+String(brightness)+"'>";
     page+="<label>Sleep after idle minutes (0 = never)</label><input name='sleep' type='number' min='0' max='1440' required value='"+String(sleepMinutes)+"'>";
     page+="<h2>Watchlist</h2><p>Comma-separated types, registrations or callsigns. A trailing * matches a prefix. Up to 16 entries per field, 15 characters each. A380 also matches A388.</p>";
@@ -314,8 +333,9 @@ void setupPage() {
     const char *effects[]={"Off","Steady","Gentle pulse","Flash"};
     for(int i=0;i<4;++i) page+="<option value='"+String(i)+"' "+String(i==int(savedAlertStyle.effect)?"selected":"")+">"+effects[i]+"</option>";
     page+="</select><p>Brightness is relative to the display brightness. Colours also identify watch markers. With several categories present, the outer ring prioritises military, then helicopters, then other watch matches. Off hides the outer ring; markers remain.</p>";
-    page+="<label>Photo service URL (optional)</label><input name='photo_url' maxlength='160' placeholder='http://192.168.1.10:8086' value='"+escape(photoBase)+"'>";
-    page+="<p>Leave blank to disable photos. Use your Docker server's LAN address.</p><button type='button' onclick=\"const b=this;b.disabled=true;fetch('/test-photo',{method:'POST',body:new URLSearchParams(new FormData(b.form))}).then(async r=>{document.getElementById('test-result').textContent=await r.text()}).catch(()=>{document.getElementById('test-result').textContent='Connection test failed'}).finally(()=>b.disabled=false)\">Test connection</button><p id='test-result' role='status'></p>";
+    page+="<label>Info server URL (optional)</label><input name='photo_url' maxlength='160' placeholder='http://192.168.1.10:8086' value='"+escape(photoBase)+"'>";
+    page+="<p>Leave blank to disable external features. Capabilities are discovered automatically. Use your Docker server's LAN address.</p><button type='button' onclick=\"const b=this;b.disabled=true;fetch('/test-photo',{method:'POST',body:new URLSearchParams(new FormData(b.form))}).then(async r=>{document.getElementById('test-result').textContent=await r.text()}).catch(()=>{document.getElementById('test-result').textContent='Connection test failed'}).finally(()=>b.disabled=false)\">Test connection</button><p id='test-result' role='status'></p>";
+    if(capsMaps) page+="<input type='hidden' name='map_setting' value='1'><label><input style='width:auto' type='checkbox' name='map_enabled' "+String(mapWanted?"checked":"")+"> Faint map background</label>";
     page+="<button>Save and start radar</button></form><p>Live aircraft data: adsb.fi. Hold the knob to reopen setup. Settings stay on this device.</p>";
     server.sendHeader("Cache-Control","no-store"); server.send(200,"text/html",page);
 }
@@ -327,17 +347,18 @@ bool coordinate(const String &s,double min,double max,double &value) {
 void saveSetup() {
     if(!portal || server.arg("token")!=csrf) { server.send(403,"text/plain","Reopen the setup page and try again."); return; }
     String newSSID=server.arg("ssid"), newPassword=server.arg("password"),newPhoto=server.arg("photo_url");
-    if(!photoURL(newPhoto)) { server.send(400,"text/plain","Photo URL must be http://SERVER-IP:PORT with no path or credentials"); return; }
+    if(!photoURL(newPhoto)) { server.send(400,"text/plain","Info server URL must be http://SERVER-IP:PORT with no path or credentials"); return; }
     double lat,lon;
     if(!newSSID.length() || newSSID.length()>32 || newPassword.length()>63 || !coordinate(server.arg("lat"),-90,90,lat) || !coordinate(server.arg("lon"),-180,180,lon)) {
         server.send(400,"text/plain","Check Wi-Fi name and decimal latitude/longitude."); return;
     }
     if(!newPassword.length() && newSSID==ssid) newPassword=password;
     if(newPassword.length() && newPassword.length()<8) { server.send(400,"text/plain","Wi-Fi password must be at least 8 characters."); return; }
-    double newBrightness,newSleep;
+    double newBrightness,newSleep,newRange;
     sky::Watches watches;
     const String types=server.arg("watch_types"),regs=server.arg("watch_regs"),calls=server.arg("watch_calls");
-    if(!coordinate(server.arg("brightness"),5,100,newBrightness) || std::floor(newBrightness)!=newBrightness ||
+    if(!coordinate(server.arg("start_range"),0,4,newRange) || floor(newRange)!=newRange ||
+       !coordinate(server.arg("brightness"),5,100,newBrightness) || std::floor(newBrightness)!=newBrightness ||
        !coordinate(server.arg("sleep"),0,1440,newSleep) || std::floor(newSleep)!=newSleep ||
        types.length()>255 || regs.length()>255 || calls.length()>255 ||
        !watches.types.set(types.c_str()) || !watches.registrations.set(regs.c_str()) || !watches.callsigns.set(calls.c_str())) {
@@ -363,18 +384,23 @@ void saveSetup() {
     watches.military=server.hasArg("watch_military"); watches.rotorcraft=server.hasArg("watch_rotor");
     watchTypes=types; watchRegs=regs; watchCalls=calls;
     watchMilitary=watches.military; watchRotor=watches.rotorcraft;
+    startRange=unsigned(newRange); prefs.putUInt("start_range",startRange);
     sleepMinutes=unsigned(newSleep);
     prefs.putUInt("brightness",unsigned(newBrightness)); prefs.putUInt("sleep_min",sleepMinutes);
     prefs.putString("watch_types",types); prefs.putString("watch_regs",regs); prefs.putString("watch_calls",calls);
     prefs.putBool("watch_mil",watchMilitary); prefs.putBool("watch_rotor",watchRotor);
     lvgl_port_lock(-1);
     brightness=unsigned(newBrightness);
+    ui::model.defaultRangeIndex=startRange;
     ui::alertStyle=newAlert;
     ui::model.watches=watches; ui::activity.sleepAfterMs=sleepMinutes*60000;
     ui::activity.lastActivity=millis(); applyBrightness();
     lvgl_port_unlock();
-    photoBase=newPhoto; prefs.putString("photo_url",photoBase); photoAttempt[0]=0; photoRetryAt=0;
-    lvgl_port_lock(-1); ui::photosEnabled=!photoBase.isEmpty() && photoPixels; ui::photoReady=false; lvgl_port_unlock();
+    photoBase=newPhoto; prefs.putString("photo_url",photoBase); photoAttempt[0]=0; photoRetryAt=0; nextCapabilities=0; nextMap=0; nextStations=0; requestedMapRange=-1;
+    capsPhotos=capsMaps=capsSatellites=false;
+    if(server.hasArg("map_setting")) mapWanted=server.hasArg("map_enabled");
+    prefs.putBool("map_enabled",mapWanted);
+    lvgl_port_lock(-1); ui::mapWanted=mapWanted; ui::photosEnabled=false; ui::mapsEnabled=false; ui::satellitesEnabled=false; ui::satelliteView=false; ui::mapReady=false; ui::photoReady=false; lvgl_port_unlock();
     ssid=newSSID; password=newPassword; homeLat=lat; homeLon=lon; configured=true;
     prefs.putString("ssid",ssid); prefs.putString("pass",password); prefs.putDouble("lat",lat); prefs.putDouble("lon",lon); prefs.putBool("set",true);
     server.send(200,"text/html","<meta name='viewport' content='width=device-width'><h1>Settings saved</h1><p>The knob is connecting. If it cannot connect, setup remains available. Press the knob to view the radar.</p>");
@@ -462,11 +488,11 @@ FeedBody readFeedBody(HTTPClient &http,size_t limit,uint32_t timeout) {
     return result;
 }
 void fetchPhoto() {
-    if(photoBase.isEmpty() || !photoPixels || ui::asleep.load()) return;
+    if(photoBase.isEmpty() || !capsPhotos || !photoPixels || ui::asleep.load()) return;
     char reg[16]{};
     lvgl_port_lock(-1);
     auto *selected=ui::model.selection();
-    if(ui::model.details && selected) snprintf(reg,sizeof(reg),"%s",selected->registration);
+    if(ui::model.details && !ui::settings && selected) snprintf(reg,sizeof(reg),"%s",selected->registration);
     lvgl_port_unlock();
     if(!reg[0]) return;
     for(char c:reg) { if(!c) break; if(!isalnum(static_cast<unsigned char>(c)) && c!='-') return; }
@@ -503,6 +529,94 @@ void fetchPhoto() {
         lvgl_port_lock(-1); snprintf(ui::photoStatus,sizeof(ui::photoStatus),"%s",code==404?"No photo available":"Photo service unavailable"); lvgl_port_unlock();
     }
     deviceLog.printf("[photo] %s HTTP=%d %s\n",reg,code,ok?"ready":"unavailable/discarded");
+}
+bool infoJSON(const String &path,JsonDocument &doc) {
+    NetworkClient client; HTTPClient http;
+    http.setConnectTimeout(1500); http.setTimeout(4000); http.useHTTP10(true);
+    http.begin(client,photoBase+path);
+    const int code=http.GET(); bool ok=false;
+    if(code==200) {
+        auto body=readFeedBody(http,8192,4000);
+        ok=body.complete && !deserializeJson(doc,body.text.c_str(),body.text.length());
+    }
+    http.end(); return ok;
+}
+void discoverInfo() {
+    JsonDocument doc;
+    const bool ok=infoJSON("/health",doc) && doc["service"]=="echoscope-photos" && doc["protocol"]==1;
+    const bool legacy=doc["capabilities"].isNull();
+    capsPhotos=ok && (legacy || doc["capabilities"]["photos"]==true);
+    capsMaps=ok && doc["capabilities"]["maps"]==true && mapPixels;
+    capsSatellites=ok && doc["capabilities"]["satellites"]==true;
+    lvgl_port_lock(-1);
+    ui::photosEnabled=capsPhotos && photoPixels;
+    ui::mapsEnabled=capsMaps;
+    ui::satellitesEnabled=capsSatellites;
+    if(!capsPhotos) { ui::photoReady=false; photoAttempt[0]=0; }
+    if(!capsMaps) { ui::mapReady=false; requestedMapRange=-1; }
+    if(!capsSatellites) { ui::satelliteView=false; ui::stationCount=0; }
+    const char *credit=doc["map_credit"] | "Copyright OpenStreetMap contributors";
+    snprintf(ui::mapCredit,sizeof(ui::mapCredit),"%s",credit);
+    lvgl_port_unlock();
+    nextCapabilities=millis()+(ok?60000:30000);
+    deviceLog.printf("[info] available=%d photos=%d maps=%d stations=%d\n",ok,capsPhotos,capsMaps,capsSatellites);
+}
+void fetchMap(int rangeIndex) {
+    requestedMapRange=rangeIndex; nextMap=millis()+10000;
+    NetworkClient client; HTTPClient http; http.setConnectTimeout(1500); http.setTimeout(4000); http.useHTTP10(true);
+    const String path="/v1/map?lat="+String(homeLat,6)+"&lon="+String(homeLon,6)+"&range="+String(int(sky::ranges[rangeIndex]));
+    http.begin(client,photoBase+path); const int code=http.GET();
+    if(code==200 && http.getSize()==int(sky::mapBytes)) {
+        auto body=readFeedBody(http,sky::mapBytes,5000);
+        if(body.complete && sky::validMap(body.text.c_str(),body.text.length())) {
+            lvgl_port_lock(-1);
+            if(ui::model.rangeIndex==rangeIndex && !ui::asleep.load()) {
+                lv_img_cache_invalidate_src(&ui::mapImage);
+                memcpy(mapPixels,body.text.c_str()+8,sky::mapBytes-8);
+                ui::mapImage.header.cf=LV_IMG_CF_TRUE_COLOR; ui::mapImage.header.w=420; ui::mapImage.header.h=420;
+                ui::mapImage.data_size=sky::mapBytes-8; ui::mapImage.data=reinterpret_cast<const uint8_t*>(mapPixels);
+                ui::mapReady=true; ui::mapRange=rangeIndex; nextMap=millis()+604800000;
+            }
+            lvgl_port_unlock();
+        }
+    }
+    http.end();
+    deviceLog.printf("[info] map range=%d HTTP=%d\n",int(sky::ranges[rangeIndex]),code);
+}
+void fetchStations() {
+    nextStations=millis()+10000;
+    JsonDocument doc;
+    const bool ok=infoJSON("/v1/satellites?lat="+String(homeLat,6)+"&lon="+String(homeLon,6),doc);
+    sky::Station values[8]{}; unsigned count=0;
+    const int64_t generated=doc["generated"] | int64_t(0);
+    if(ok && std::abs(int64_t(time(nullptr))-generated)<=30) {
+        for(JsonObjectConst item:doc["satellites"].as<JsonArrayConst>()) {
+            if(count>=8) break;
+            const float az=sky::number(item["az"]),el=sky::number(item["el"]),km=sky::number(item["km"]);
+            if(!std::isfinite(az) || az<0 || az>=360 || !std::isfinite(el) || el< -90 || el>90 || !std::isfinite(km) || km<0) continue;
+            auto &station=values[count++]; sky::copyText(station.name,item["name"]);
+            station.az=az; station.el=el; station.km=km; station.nextRise=item["next_rise"] | uint32_t(0);
+        }
+    }
+    lvgl_port_lock(-1);
+    if(count) { memcpy(ui::stations,values,sizeof(values)); ui::stationCount=count; ui::stationReceived=millis(); }
+    else { ui::satellitesEnabled=false; ui::satelliteView=false; ui::stationCount=0; }
+    lvgl_port_unlock();
+}
+void fetchInfo() {
+    if(photoBase.isEmpty() || ui::asleep.load()) return;
+    const uint32_t now=millis();
+    if(int32_t(now-nextCapabilities)>=0) { discoverInfo(); return; }
+    lvgl_port_lock(-1);
+    const bool skyView=ui::satelliteView,radar=!ui::settings && !ui::model.details && !skyView;
+    const int rangeIndex=ui::model.rangeIndex;
+    lvgl_port_unlock();
+    if(skyView && capsSatellites && int32_t(now-nextStations)>=0) { fetchStations(); return; }
+    if(radar && capsMaps && mapWanted) {
+        if(requestedMapRange!=rangeIndex) nextMap=now;
+        if(int32_t(now-nextMap)>=0) { fetchMap(rangeIndex); return; }
+    }
+    fetchPhoto();
 }
 void fetch() {
     if(ui::asleep.load()) return;
@@ -611,13 +725,15 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.5.1 / configurable alert appearance");
+    deviceLog.println("EchoScope 0.6.0 / information server, maps and stations");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
-    photoBase=prefs.getString("photo_url",""); ui::photosEnabled=!photoBase.isEmpty();
+    photoBase=prefs.getString("photo_url",""); ui::photosEnabled=false;
+    mapWanted=prefs.getBool("map_enabled",true); ui::mapWanted=mapWanted;
     photoPixels=static_cast<lv_color_t*>(heap_caps_malloc(200*150*2,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
     if(!photoPixels) ui::photosEnabled=false;
+    mapPixels=static_cast<lv_color_t*>(heap_caps_malloc(420*420*2,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
     savedAlertStyle.watch=prefs.getUInt("alert_watch",0x68F3AE)&0xFFFFFF;
     savedAlertStyle.helicopter=prefs.getUInt("alert_heli",0x62D8F5)&0xFFFFFF;
     savedAlertStyle.military=prefs.getUInt("alert_mil",0xD59AF5)&0xFFFFFF;
@@ -626,6 +742,8 @@ void setup() {
     savedAlertStyle.periodSeconds=std::max<uint32_t>(2,std::min<uint32_t>(12,prefs.getUInt("alert_period",4)));
     savedAlertStyle.effect=sky::AlertEffect(std::min<uint32_t>(3,prefs.getUInt("alert_effect",2)));
     ui::alertStyle=savedAlertStyle;
+    startRange=std::min<uint32_t>(4,prefs.getUInt("start_range",2));
+    ui::model.defaultRangeIndex=startRange; ui::model.rangeIndex=startRange;
     brightness=std::max<uint32_t>(5,std::min<uint32_t>(100,prefs.getUInt("brightness",100)));
     sleepMinutes=std::min<uint32_t>(1440,prefs.getUInt("sleep_min",60)); ui::activity.sleepAfterMs=sleepMinutes*60000;
     watchTypes=prefs.getString("watch_types",""); watchRegs=prefs.getString("watch_regs",""); watchCalls=prefs.getString("watch_calls","");
@@ -708,7 +826,7 @@ void loop() {
         if(uint32_t(now-lastDemo)>1000) { demoFrame(now); lastDemo=now; }
     } else if(WiFi.status()==WL_CONNECTED) {
         if(int32_t(now-nextFetch)>=0) fetch();
-        else fetchPhoto();
+        else fetchInfo();
     } else {
         status("Wi-Fi disconnected");
         if(int32_t(now-nextReconnect)>=0) { WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=now+20000; }

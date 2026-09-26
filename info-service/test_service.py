@@ -17,6 +17,23 @@ class Photos(unittest.TestCase):
     def test_urls(self):
         for url in ['http://t.plnspttrs.net/a','https://evil.test/a','https://t.plnspttrs.net@evil.test/a','https://t.plnspttrs.net:8443/a']:
             with self.assertRaises(ValueError): service.safe_url(url,{'t.plnspttrs.net'})
+    def test_capability_discovery_and_disabled_features(self):
+        from unittest.mock import Mock
+        import os
+        handler=object.__new__(service.Handler)
+        handler.reply=Mock()
+        handler.path='/health'
+        with patch.dict(os.environ, {'ENABLE_PHOTOS':'0'}), patch.object(service.extras,'MAPS',False), patch.object(service.extras,'available_satellites',return_value=[]):
+            handler.do_GET()
+        payload=service.json.loads(handler.reply.call_args.args[1])
+        self.assertEqual(payload['capabilities'], {'photos':False,'maps':False,'satellites':False})
+        handler.path='/v1/photo/G-UZHO'
+        with patch.dict(os.environ, {'ENABLE_PHOTOS':'0'}): handler.do_GET()
+        self.assertEqual(handler.reply.call_args.args[0],404)
+        handler.path='/v1/map?lat=51&lon=0&range=25'
+        with patch.object(service.extras,'MAPS',False): handler.do_GET()
+        self.assertEqual(handler.reply.call_args.args[0],404)
+
     def test_negative_cache(self):
         service.CACHE.clear()
         with patch.object(service,'download',return_value=b'{"photos":[]}') as download:

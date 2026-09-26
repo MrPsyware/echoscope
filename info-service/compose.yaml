@@ -1,0 +1,24 @@
+name: echoscope-photos
+services:
+  photos:
+    build: .
+    ports:
+      - "0.0.0.0:${INFO_PORT:-${PHOTO_PORT:-8086}}:8086"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      ENABLE_PHOTOS: ${ENABLE_PHOTOS:-1}
+      TILE_URL: ${TILE_URL:-}
+      MAP_CREDIT: ${MAP_CREDIT:-Copyright OpenStreetMap contributors}
+      ENABLE_MAPS: ${ENABLE_MAPS:-1}
+      ENABLE_SATELLITES: ${ENABLE_SATELLITES:-1}
+      SATELLITE_IDS: ${SATELLITE_IDS:-25544,48274}
+    volumes:
+      - info-cache:/data
+    mem_limit: 256m
+    pids_limit: 64
+
+volumes:
+  info-cache:

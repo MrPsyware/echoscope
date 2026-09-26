@@ -7,6 +7,8 @@
 #include <iostream>
 int main() {
     using namespace sky;
+    Model startup; startup.defaultRangeIndex=4; startup.reset(); assert(startup.range()==100);
+    startup.rotate(-2,0); assert(startup.range()==25); startup.reset(); assert(startup.range()==100);
     AlertStyle style;
     assert(style.brightness==30 && style.width==3 && style.periodSeconds==4);
     assert(style.opacity(0)<style.opacity(1000) && style.opacity(1000)<style.opacity(2000));
