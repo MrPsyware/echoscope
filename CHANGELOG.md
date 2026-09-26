@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- Add a capability-aware INFO menu for weather, family flight tracking, nearby airports, selected flight routes and space stations.
+- Add saved family flight number, optional broadcast callsign override and arrival airport in web setup. Track beyond local radar range; show fresh position, altitude, speed and direct airport distance when known.
+- Resolve booking numbers through adsbdb when possible, and handle missing/ambiguous/stale positions without inventing landing or arrival estimates.
+- Add local weather and cloud forecasts at three-hour intervals over the next day, including cloud layers, rain chance and day/night labels, via Open-Meteo.
+- Cache the OurAirports index on the information server, with optional feature switches and bounded upstream caches.
+- Hide unsupported menu options; pause information requests during sleep and suppress stale flight details.
+
 ## 0.6.0
 
 - Add a saved startup range in web setup.

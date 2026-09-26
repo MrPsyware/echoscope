@@ -9,6 +9,9 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     environment:
+      ENABLE_WEATHER: ${ENABLE_WEATHER:-1}
+      ENABLE_FLIGHTS: ${ENABLE_FLIGHTS:-1}
+      ENABLE_AIRPORTS: ${ENABLE_AIRPORTS:-1}
       ENABLE_PHOTOS: ${ENABLE_PHOTOS:-1}
       TILE_URL: ${TILE_URL:-}
       MAP_CREDIT: ${MAP_CREDIT:-Copyright OpenStreetMap contributors}

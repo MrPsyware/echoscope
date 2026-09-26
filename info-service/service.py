@@ -2,6 +2,7 @@
 import html
 import os
 import extras
+import insights
 import io
 import json
 import re
@@ -15,7 +16,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError
 from PIL import Image
 
-USER_AGENT = 'EchoScope/0.6.0 (+https://github.com/MrPsyware/echoscope)'
+USER_AGENT = 'EchoScope/0.7.0 (+https://github.com/MrPsyware/echoscope)'
 REG = re.compile(r'[A-Z0-9][A-Z0-9-]{0,14}\Z')
 CACHE = OrderedDict()
 LOCK = threading.Lock()
@@ -93,6 +94,10 @@ def photo(registration):
         return result
 
 class Handler(BaseHTTPRequestHandler):
+    def log_request(self, code='-', size='-'):
+        # Keep flight numbers and home coordinates out of normal access logs.
+        self.log_message('"%s %s" %s %s', self.command, urlsplit(self.path).path, code, size)
+
     def reply(self, code, body, mime):
         self.send_response(code)
         self.send_header('Content-Type', mime)
@@ -106,9 +111,33 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/health':
             body = {'service': 'echoscope-photos', 'name': 'EchoScope Info Server', 'protocol': 1,
                     'capabilities': {'photos': os.environ.get('ENABLE_PHOTOS', '1') == '1',
-                                     'maps': extras.MAPS, 'satellites': bool(extras.available_satellites())},
+                                     'maps': extras.MAPS, 'satellites': bool(extras.available_satellites()),
+                                     'weather': insights.WEATHER, 'flights': insights.FLIGHTS,
+                                     'airports': insights.AIRPORTS and bool(insights.AIRPORT_INDEX)},
                     'map_credit': extras.MAP_CREDIT}
             return self.reply(200, json.dumps(body).encode(), 'application/json')
+        if path in ('/v1/weather', '/v1/family', '/v1/route', '/v1/airports'):
+            enabled = insights.WEATHER if path.endswith('weather') else insights.AIRPORTS and bool(insights.AIRPORT_INDEX) if path.endswith('airports') else insights.FLIGHTS
+            if not enabled:
+                return self.reply(404, b'Capability unavailable', 'text/plain')
+            if not GATE.acquire(blocking=False):
+                return self.reply(503, b'Busy', 'text/plain')
+            try:
+                from urllib.parse import parse_qs
+                query = parse_qs(urlsplit(self.path).query)
+                if path.endswith('weather') or path.endswith('airports'):
+                    lat, lon, query = extras.location(urlsplit(self.path).query)
+                    body = insights.weather(lat, lon, download) if path.endswith('weather') else insights.nearby(lat, lon)
+                elif path.endswith('route'):
+                    body = insights.route(query.get('flight', [''])[0], download)
+                else:
+                    body = insights.family(query.get('flight', [''])[0], query.get('callsign', [''])[0], query.get('arrival', [''])[0], download)
+                return self.reply(200, json.dumps(body, allow_nan=False).encode(), 'application/json')
+            except (OSError, ValueError, KeyError, TypeError, IndexError) as error:
+                print(f'Info lookup {path} failed: {type(error).__name__}: {error}', flush=True)
+                return self.reply(502, b'Information unavailable; try again shortly', 'text/plain')
+            finally:
+                GATE.release()
         if path in ('/v1/map', '/v1/satellites'):
             if (path.endswith('map') and not extras.MAPS) or (path.endswith('satellites') and not extras.available_satellites()):
                 return self.reply(404, b'Capability unavailable', 'text/plain')
@@ -127,7 +156,7 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 GATE.release()
         if path == '/':
-            return self.reply(200, b'<h1>EchoScope Info Server</h1><p>Photos, maps and station predictions. Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>. Orbits: CelesTrak / SGP4.</p><p>Service ready. Set this server URL in EchoScope setup.</p><p>Photo credits and original links: /photo/REGISTRATION</p>', 'text/html; charset=utf-8')
+            return self.reply(200, b'<h1>EchoScope Info Server</h1><p>Photos, maps, station predictions, weather and flight information. Weather: <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0). Flights: <a href="https://adsb.fi/">adsb.fi</a> and <a href="https://www.adsbdb.com/">adsbdb</a>. Airports: <a href="https://ourairports.com/data/">OurAirports</a>. Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>. Orbits: CelesTrak / SGP4.</p><p>Service ready. Set this server URL in EchoScope setup.</p><p>Photo credits and original links: /photo/REGISTRATION</p>', 'text/html; charset=utf-8')
         binary = path.startswith('/v1/photo/')
         if not binary and not path.startswith('/photo/'):
             return self.reply(404, b'Not found', 'text/plain')
@@ -154,4 +183,5 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     extras.start(download)
+    insights.start(download)
     ThreadingHTTPServer(('0.0.0.0', 8086), Handler).serve_forever()

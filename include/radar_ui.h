@@ -49,6 +49,7 @@ inline void text(int y,const char *s,const lv_font_t *font=&lv_font_montserrat_1
 inline lv_point_t screen(sky::Point p) {
     return {lv_coord_t(centre+p.east/model.range()*radius),lv_coord_t(centre-p.north/model.range()*radius)};
 }
+#include "insight_ui.h"
 inline void metric(int y,const char *name,float value,const char *unit) {
     char s[80]; if(std::isfinite(value)) std::snprintf(s,sizeof(s),"%s   %.0f %s",name,value,unit);
     else std::snprintf(s,sizeof(s),"%s   --",name);
@@ -117,6 +118,7 @@ inline void render(uint32_t now) {
         text(370,"Press or tap to return",&lv_font_montserrat_16,muted);
         return;
     }
+    if(infoMenu || infoView) { renderInfo(now); return; }
     if(satelliteView && satellitesEnabled) { renderStations(now); return; }
     const bool stale=!model.demo && (!model.hasUpdate || uint32_t(now-model.lastUpdate)>20000);
     // Attribution remains in setup/details; normal live operation needs no banner.
@@ -245,7 +247,7 @@ inline void render(uint32_t now) {
     }
     if(model.demo && !activity.filterVisible) text(84,"DEMO",&lv_font_montserrat_14,muted);
     if(drawMap) text(383,mapCredit,&lv_font_montserrat_12,white,58,350);
-    if(satellitesEnabled) text(82,"SAT >",&lv_font_montserrat_14,green,315,70);
+    if(infoAvailable()) text(82,"INFO >",&lv_font_montserrat_14,green,315,70);
     footer(visible);
     const auto alert=model.activeAlert(now);
     const uint8_t opacity=alertStyle.opacity(now);
@@ -255,11 +257,12 @@ inline void render(uint32_t now) {
 }
 inline void tap(int x,int y,uint32_t now) {
     if(settings) { settings=false; return; }
+    if(infoMenu || infoView) { tapInfo(y); return; }
     if(satelliteView) { satelliteView=false; return; }
     if(model.details) {
         model.details=false; model.refresh(now); return;
     }
-    if(satellitesEnabled && y>=70 && y<=108 && x>=305 && x<=395) { satelliteView=true; return; }
+    if(infoAvailable() && y>=70 && y<=108 && x>=305 && x<=395) { openInfo(); return; }
     if(y>=20 && y<67 && x>=128 && x<=338) { if(activity.tapFilter(now)) { model.cycleFilter(now); requestFeed=true; } return; }
     if(y>=400) { model.selectMode=x>=183 && x<283; model.altitudeMode=x>=283; model.refresh(now); return; }
     float east=(x-centre)*model.range()/radius, north=(centre-y)*model.range()/radius;

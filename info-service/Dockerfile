@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY service.py extras.py .
+COPY service.py extras.py insights.py .
 RUN mkdir /data && chown 65534:65534 /data
 USER 65534:65534
 EXPOSE 8086

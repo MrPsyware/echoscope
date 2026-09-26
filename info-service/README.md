@@ -20,7 +20,7 @@ On the knob, hold five seconds, browse to its displayed IP, and save `http://YOU
 
 - **Photos:** actual aircraft thumbnail by registration via Planespotters. The photo shares flight details once loaded. Missing, disabled or unavailable photos leave the normal full text page, with no empty frame. Credits remain on-screen and original links are available at `http://KNOB-IP/photo` and `http://SERVER-IP:8086/photo/REGISTRATION`. Photographs are cached in memory for five minutes; not saved to disk.
 - **Street map:** current-view OpenStreetMap tiles are reprojected to the same azimuthal equidistant projection as the radar, shaded faintly and returned as a 420×420 RGB565 image. It supports the knob's 5/10/25/50/100 km ranges. Only the requested view is fetched; no background prefetch. Attribution is visible on the scope and linked on the server home page. The background disappears immediately on a range change until the matching image is ready. Coordinates near the poles (beyond 85°) are unsupported for maps/stations.
-- **Space stations:** ISS and Tiangong by default. A **SAT >** touch target appears on the radar only when fresh orbital data is available. Tap it for a north-up sky view: centre = overhead, outer circle = horizon. Rotate to select a station; tap/press to return to aircraft. Positions, azimuth, elevation, distance and the next rise above 10° in the following 24 hours are predicted using Skyfield/SGP4. Time is UTC. These are geometric predictions, not naked-eye visibility forecasts (sunlight, observer darkness and clouds are not modelled).
+- **Space stations:** ISS and Tiangong by default. The **INFO >** menu offers Space stations only when fresh orbital data is available. Open it for a north-up sky view: centre = overhead, outer circle = horizon. Rotate to select a station; tap/press to return to aircraft. Positions, azimuth, elevation, distance and the next rise above 10° in the following 24 hours are predicted using Skyfield/SGP4. Time is UTC. These are geometric predictions, not naked-eye visibility forecasts (sunlight, observer darkness and clouds are not modelled).
 
 The map is requested only while viewing the awake radar; station position requests run only in the station view. Missing capabilities and failed station responses hide the associated UI. Temporary map failures leave the normal radar. New requests stop during display sleep. An in-flight server calculation can finish.
 
@@ -48,7 +48,7 @@ For example: `ENABLE_PHOTOS=0 ENABLE_MAPS=1 make docker`. Configuration changes 
 
 ## Protocol
 
-`GET /health` returns protocol 1, the display name **EchoScope Info Server**, booleans in `capabilities` (`photos`, `maps`, `satellites`) and `map_credit`. The legacy `service: "echoscope-photos"` identifier and `/v1/photo/REGISTRATION` endpoint remain for older firmware. New firmware also recognizes old photo-only servers without a capabilities object. Unknown capabilities are ignored.
+`GET /health` returns protocol 1, the display name **EchoScope Info Server**, booleans in `capabilities` (`photos`, `maps`, `satellites`, `weather`, `flights`, `airports`) and `map_credit`. The legacy `service: "echoscope-photos"` identifier and `/v1/photo/REGISTRATION` endpoint remain for older firmware. New firmware also recognizes old photo-only servers without a capabilities object. Unknown capabilities are ignored.
 
 - `/v1/photo/REG`: ECP1, little-endian width/height, 128-byte photographer + 256-byte HTTPS source fields, big-endian RGB565 pixels. Maximum 200×150.
 - `/v1/map?lat=51.5&lon=0&range=25`: ECM1, little-endian 420×420 dimensions, then big-endian RGB565 (352,808 bytes total). HTTP 202 while the server renders asynchronously; retry later. Firmware caps the response and validates the header/dimensions.
@@ -62,3 +62,16 @@ The service is intended for your LAN. No changes to the direct adsb.fi aircraft 
 python -m pip install -r info-service/requirements.txt
 python -m unittest discover -s info-service -v
 ```
+
+## Weather, flights and airports
+
+All three are enabled by default; set `ENABLE_WEATHER=0`, `ENABLE_FLIGHTS=0` or `ENABLE_AIRPORTS=0` before `make docker` to disable individual features. Airports are advertised only after their index is ready. Existing saved server URLs, Compose identity, port and cache volume are unchanged. The service still listens on `0.0.0.0:8086`.
+
+- `/v1/weather?lat=51.5&lon=0`: current model weather and eight cloud forecast samples at three-hour intervals over 24 hours. Cached 15 minutes; Open-Meteo free personal-use endpoint, no key. Includes low/mid/high cloud, rain chance and day/night. UTC times. Not an astronomical seeing forecast.
+- `/v1/family?flight=U2123&callsign=EZY123&arrival=LGW`: optional override and airport parameters. adsbdb attempts booking-to-ICAO callsign resolution when no override is given. adsb.fi provides positions independently of radar range. Cached 20 seconds. No fresh or multiple matching aircraft produces an explicit status. Airport distance is geometric distance, not ETA. An arrival airport differing from the route database is flagged. No schedule, delay, gate or terminal data is claimed.
+- `/v1/route?flight=EZY123`: origin/destination database entry, cached six hours (including unknown routes). Database routes can differ from the actual day's operation.
+- `/v1/airports?lat=51.5&lon=0`: five nearest open small/medium/large airports; excludes heliports and closed fields. OurAirports public-domain CSV is downloaded at most daily into a compact persistent `/data/airports-index.json`. The initial download is about 13 MB and runs in the background. Failed refreshes retry hourly and retain an existing index.
+
+These endpoints return `generated` (Unix UTC), `source`, and at most nine `pages` with a title and up to seven text lines. Payloads fit the knob's 8 KiB limit. Unknown numeric values appear as `--`, not zero. Upstream failures return HTTP 502 and log the endpoint/error; failed lookups back off for 30 seconds. Successful/failed lookup caches share a 64-entry bound; callsign requests are serialized at no more than one per 1.1 seconds. The knob requests pages only while awake and viewing them. No tracking history or personal flight configuration is stored by the server; flight settings remain on the knob and short-lived query results are cached in memory.
+
+Attribution and terms: [Open-Meteo](https://open-meteo.com/) / [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), [adsb.fi](https://adsb.fi/) / [API terms](https://github.com/adsbfi/opendata), [adsbdb](https://www.adsbdb.com/), [OurAirports](https://ourairports.com/data/). Free weather and flight endpoints are for personal/non-commercial use. This server does not use airline-account credentials or paid provider keys.

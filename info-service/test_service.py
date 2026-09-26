@@ -23,10 +23,14 @@ class Photos(unittest.TestCase):
         handler=object.__new__(service.Handler)
         handler.reply=Mock()
         handler.path='/health'
-        with patch.dict(os.environ, {'ENABLE_PHOTOS':'0'}), patch.object(service.extras,'MAPS',False), patch.object(service.extras,'available_satellites',return_value=[]):
+        with patch.dict(os.environ, {'ENABLE_PHOTOS':'0'}), patch.object(service.extras,'MAPS',False), patch.object(service.extras,'available_satellites',return_value=[]), patch.object(service.insights,'WEATHER',False), patch.object(service.insights,'FLIGHTS',False), patch.object(service.insights,'AIRPORTS',False):
             handler.do_GET()
         payload=service.json.loads(handler.reply.call_args.args[1])
-        self.assertEqual(payload['capabilities'], {'photos':False,'maps':False,'satellites':False})
+        self.assertEqual(payload['capabilities'], {'photos':False,'maps':False,'satellites':False,'weather':False,'flights':False,'airports':False})
+        for path,flag in [('/v1/weather?lat=51&lon=0','WEATHER'),('/v1/family?flight=U2123','FLIGHTS'),('/v1/airports?lat=51&lon=0','AIRPORTS')]:
+            handler.path=path
+            with patch.object(service.insights,flag,False): handler.do_GET()
+            self.assertEqual(handler.reply.call_args.args[0],404)
         handler.path='/v1/photo/G-UZHO'
         with patch.dict(os.environ, {'ENABLE_PHOTOS':'0'}): handler.do_GET()
         self.assertEqual(handler.reply.call_args.args[0],404)
