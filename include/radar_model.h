@@ -116,7 +116,7 @@ struct Model {
     char selected[12]{};
     int rangeIndex = 2, defaultRangeIndex=2;
     Filter filter=Filter::All;
-    bool selectMode = true, altitudeMode=false;
+    bool selectMode = true, altitudeMode=false, typeMode=false;
     int altitudeFilter=0;
     Watches watches;
     bool details = false;
@@ -125,7 +125,7 @@ struct Model {
     uint32_t lastUpdate = 0;
     float range() const { return ranges[rangeIndex]; }
     void reset() {
-        data.count=0; selected[0]=0; rangeIndex=defaultRangeIndex; filter=Filter::All; selectMode=true; altitudeMode=false; altitudeFilter=0;
+        data.count=0; selected[0]=0; rangeIndex=defaultRangeIndex; filter=Filter::All; selectMode=true; altitudeMode=false; typeMode=false; altitudeFilter=0;
         details=false; demo=true; hasUpdate=false; lastUpdate=0;
         if(trails) for(size_t i=0;i<maxAircraft;++i) trails[i].clear();
     }
@@ -186,6 +186,7 @@ struct Model {
     }
     void rotate(int delta,uint32_t now) {
         if(!delta) return;
+        if(!details && typeMode) { cycleFilter(now,delta); return; }
         if(!details && altitudeMode) { altitudeFilter=((altitudeFilter+delta)%6+6)%6; refresh(now); return; }
         if(!details && !selectMode) {
             rangeIndex=std::max(0,std::min(4,rangeIndex+delta)); refresh(now); return;
@@ -200,13 +201,18 @@ struct Model {
         else idx=((idx+delta)%count+count)%count;
         select(choices[idx]);
     }
-    void cycleFilter(uint32_t now) { const Filter sequence[]={Filter::All,Filter::Watch,Filter::Rotorcraft,Filter::Military,Filter::Light,Filter::Large}; for(int i=0;i<6;++i) if(filter==sequence[i]) { filter=sequence[(i+1)%6]; break; } details=false; refresh(now); }
+    void cycleFilter(uint32_t now,int delta=1) { const Filter sequence[]={Filter::All,Filter::Watch,Filter::Rotorcraft,Filter::Military,Filter::Light,Filter::Large}; for(int i=0;i<6;++i) if(filter==sequence[i]) { filter=sequence[((i+delta)%6+6)%6]; break; } details=false; refresh(now); }
     void press(uint32_t now) {
         if(details) { details=false; refresh(now); return; }
-        if(altitudeMode) altitudeMode=false;
-        else if(selectMode) { selectMode=false; altitudeMode=true; }
-        else selectMode=true;
+        setMode((rotationMode()+1)%4);
         refresh(now);
+    }
+    int rotationMode() const { return typeMode?3:altitudeMode?2:selectMode?1:0; }
+    void setMode(int mode) { selectMode=mode==1; altitudeMode=mode==2; typeMode=mode==3; }
+    void tapMode(int mode,uint32_t now) {
+        if(rotationMode()!=mode) setMode(mode);
+        else if(mode==0) { rangeIndex=(rangeIndex+1)%5; refresh(now); }
+        else rotate(1,now);
     }
     void openSelected(uint32_t now) {
         normaliseSelection(now);

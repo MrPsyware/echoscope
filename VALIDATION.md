@@ -196,3 +196,11 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
   are covered in host tests. Physical touch duration/rotation and on-device frame
   timing still need user confirmation. No firmware was flashed and no user Docker
   deployment/history was modified; migration ran against test databases only.
+
+## Version 0.11.0 — controls and sleep monitoring
+
+- Host model, JSON, photo and network-tool tests passed. New model checks cover all four modes, tap-to-select/advance, sleeping 30/5-second cadence, optional automatic wake, departure, stale timeout, user takeover, explicit remote sleep and timer rollover.
+- All 37 info-service tests passed, including fresh sleeping logbook capture and concise unavailable routes; Docker image built successfully.
+- Native LVGL rendering inspected for the four-control radar footer, reordered six-item Information menu and unavailable route page. Interaction assertions passed for route-page retention (including missing callsign), logbook trace retention, menu ordering and grouped subpages.
+- Release firmware built and packaged: application 1,766,048 bytes; static RAM 96,916 bytes. No new framebuffer allocations.
+- Hardware was not flashed. Verify physical footer taps, idle polling and watch-triggered wake/return on the knob after updating. Error retry backoff remains in force; the sleep intervals are delays between requests, not guaranteed wall-clock sample periods.

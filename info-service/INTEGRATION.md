@@ -7,7 +7,7 @@ the spotting log or observing/pickup alerts.
 
 ## Setup
 
-1. Update the knob firmware and this Docker service to 0.10.0 or newer.
+1. Update the knob firmware and this Docker service to 0.11.0 or newer.
 2. Hold the knob for five seconds and open its setup page. Enable **authenticated
    LAN integration**, save, and copy the **Device API token**. Its IP should have
    a DHCP reservation. Keep the existing Info Server URL configured on the knob.
@@ -62,8 +62,10 @@ is retained and republished after Home Assistant/broker reconnect. Commands must
 **not** be retained; retained commands and commands queued for over 15 seconds are
 ignored. Queue sizes are bounded during broker outages. State topics are refreshed,
 not retained as a stale aircraft history. Brightness is runtime-only; save your
-preferred boot brightness in web setup. Explicit sleep disarms pickup and pauses
-the aircraft feed, but HTTP controls stay available to wake the device. Controls
+preferred boot brightness in web setup. Explicit sleep disarms pickup. Aircraft polling continues every 30 seconds, or
+every 5 seconds while a fresh watched aircraft is visible. Logbook recording
+continues with fresh data while the screen is off. HTTP controls stay available.
+Explicit screen-off suppresses automatic watch wake until the match has left. Controls
 return busy during setup, firmware upload or page animation rather than interrupting them.
 
 ## Family pickup

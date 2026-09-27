@@ -36,7 +36,7 @@ class Store:
                 self.db.execute('DELETE FROM sightings')
     def ingest(self,state,now=None):
         now=now or time.time()
-        if state.get('demo') or not state.get('screen'): return
+        if state.get('demo'): return
         day=datetime.fromtimestamp(now,timezone.utc).strftime('%Y-%m-%d')
         with self.lock,self.db:
             for a in state.get('aircraft',[])[:64]:
@@ -101,9 +101,10 @@ class Store:
             if insights.FLIGHTS: self.capture_route(download,entry_id)
         except (OSError,ValueError,KeyError,TypeError): pass
         row=self.entry(entry_id)
-        route=insights.route_page(row['callsign'],row['route']) if row['route'] is not None else insights.page('FLIGHT ROUTE','Route unavailable; retry later')
-        route['lines']=route['lines'][:5]+['Database route; not a filed flight plan']
-        if row['route_time']: route['lines'].append('Looked up '+insights.clock(row['route_time']))
+        route=insights.route_page(row['callsign'],row['route']) if row['route'] is not None else insights.page('FLIGHT ROUTE','Unavailable')
+        if row['route']:
+            route['lines']=route['lines'][:5]+['Database route; not a filed flight plan']
+            if row['route_time']: route['lines'].append('Looked up '+insights.clock(row['route_time']))
         radius=self.track_range(row)
         result=insights.result([route],'EchoScope / adsbdb')
         result.update({'id':row['id'],'registration':row['registration'],'lat':row['lat'],'lon':row['lon'],'range':radius,

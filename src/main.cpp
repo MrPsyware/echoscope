@@ -115,9 +115,9 @@ void controls(lv_timer_t *) {
     if(steps && wakeForInput(now)) { steps=0; remainder=0; }
     remainder+=steps;
     if(std::abs(remainder)>=transitionsPerDetent) {
-        const int previousBand=ui::model.altitudeFilter;
-        if(!ui::settings && !ui::pageAnimating) { if(ui::infoMenu || ui::infoView) ui::rotateInfo(remainder/transitionsPerDetent); else if(ui::satelliteView) ui::rotateStations(remainder/transitionsPerDetent); else ui::model.rotate((ui::model.details || ui::model.selectMode || ui::model.altitudeMode)?-remainder/transitionsPerDetent:remainder/transitionsPerDetent,now); }
-        if(previousBand!=ui::model.altitudeFilter) ui::requestFeed=true;
+        const int previousBand=ui::model.altitudeFilter; const auto previousType=ui::model.filter;
+        if(!ui::settings && !ui::pageAnimating) { if(ui::infoMenu || ui::infoView) ui::rotateInfo(remainder/transitionsPerDetent); else if(ui::satelliteView) ui::rotateStations(remainder/transitionsPerDetent); else ui::model.rotate((ui::model.details || ui::model.selectMode || ui::model.altitudeMode || ui::model.typeMode)?-remainder/transitionsPerDetent:remainder/transitionsPerDetent,now); }
+        if(previousBand!=ui::model.altitudeFilter || previousType!=ui::model.filter) ui::requestFeed=true;
         remainder%=transitionsPerDetent;
     }
     ButtonEvent event;
@@ -141,17 +141,23 @@ void controls(lv_timer_t *) {
         else if(ui::satelliteView) ui::satelliteView=false;
         else if(ui::routePage) { ui::routePage=false; ui::model.details=false; }
         else ui::model.press(now);
-        deviceLog.printf("[input] Click accepted; rotation=%s\n",ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
+        deviceLog.printf("[input] Click accepted; rotation=%s\n",ui::model.typeMode?"type":ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
     }
     if(ui::pickupArmed && uint32_t(now-ui::pickupStarted)>=86400000u) ui::pickupArmed=false;
     const bool showingAlert=ui::notificationUntil && int32_t(ui::notificationUntil-now)>0;
+    if(ui::activity.updateWatch(now)) {
+        ui::asleep=ui::activity.sleeping;
+        board->getLCD()->setDisplayOnOff(!ui::asleep.load());
+        if(!ui::asleep.load()) applyBrightness();
+        deviceLog.println(ui::asleep.load()?"[power] Watch left; returning to sleep":"[power] Watch detected; automatic wake");
+    }
     if(ui::activity.tick(millis(),ui::input.touching || ui::input.buttonHeld || wakeButton || ui::pickupArmed || showingAlert)) {
         ui::asleep=true;
         if(!board->getLCD()->setDisplayOnOff(false)) {
             lv_canvas_fill_bg(ui::canvas,lv_color_black(),LV_OPA_COVER);
             deviceLog.println("[power] Display off command failed; using black screen");
         }
-        deviceLog.println("[power] Idle sleep; feed paused");
+        deviceLog.println("[power] Idle sleep; monitoring every 30 seconds");
     }
 }
 void touch(lv_event_t *event) {
@@ -337,10 +343,11 @@ String alertColorInput(const char *name,const char *label,uint32_t color) {
 void setupPage() {
     if(!portal) { server.send(403,"text/plain","Hold the knob for 5 seconds to enable setup."); return; }
     String page=R"HTML(<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>EchoScope setup</title>
-<style>body{background:#071918;color:#e8f8f4;font:17px system-ui;max-width:440px;margin:40px auto;padding:24px}h1{color:#68f3ae}label{display:block;margin:22px 0 6px}input,button{box-sizing:border-box;width:100%;padding:13px;border-radius:8px;border:1px solid #52716a;font:inherit}button{background:#68f3ae;margin-top:26px}p{line-height:1.5}</style>
+<style>body{background:#071918;color:#e8f8f4;font:17px system-ui;max-width:440px;margin:40px auto;padding:24px}h1{color:#68f3ae}label{display:block;margin:22px 0 6px}input,button{box-sizing:border-box;width:100%;padding:13px;border-radius:8px;border:1px solid #52716a;font:inherit}button{background:#68f3ae;margin-top:26px}p{line-height:1.5}h2{border-top:1px solid #52716a;padding-top:22px}fieldset{margin:32px 0 0;padding:16px;border:1px solid #52716a;border-radius:12px;min-width:0}legend{color:#68f3ae;font-weight:bold}h3{margin-top:28px}</style>
 <h1>EchoScope</h1><p>Choose your home Wi-Fi and the centre of your radar. Coordinates are decimal degrees; west and south are negative.</p><form method="post" action="/save">
 )HTML";
     page+="<input type='hidden' name='token' value='"+csrf+"'>";
+    page+="<h2>Network and radar</h2>";
     page+="<label>Wi-Fi name (2.4 GHz)</label><input name='ssid' maxlength='32' required value='"+escape(ssid)+"'>";
     page+="<label>Wi-Fi password</label><input name='password' type='password' maxlength='63' autocomplete='new-password' placeholder='Leave blank to keep saved password'>";
     page+="<label>Latitude</label><input name='lat' type='number' step='any' min='-90' max='90' required value='"+(configured?String(homeLat,6):String(""))+"'>";
@@ -355,7 +362,8 @@ void setupPage() {
     page+="<label>Registrations</label><input name='watch_regs' maxlength='255' placeholder='G-UZHO' value='"+escape(watchRegs)+"'>";
     page+="<label>Callsigns</label><input name='watch_calls' maxlength='255' placeholder='RCH*' value='"+escape(watchCalls)+"'>";
     page+="<label><input style='width:auto' type='checkbox' name='watch_military' "+String(watchMilitary?"checked":"")+"> Watch military aircraft</label>";
-    page+="<label><input style='width:auto' type='checkbox' name='watch_rotor' "+String(watchRotor?"checked":"")+"> Watch helicopters</label><p>Fresh visible matches activate the outer alert ring. Range, aircraft and altitude filters apply. Sleep pauses monitoring.</p>";
+    page+="<label><input style='width:auto' type='checkbox' name='watch_rotor' "+String(watchRotor?"checked":"")+"> Watch helicopters</label><p>Fresh visible matches activate the outer alert ring. Range, aircraft and altitude filters apply. While sleeping, monitoring continues every 30 seconds, or every 5 seconds with a fresh visible watch match.</p>";
+    page+="<label><input style='width:auto' type='checkbox' name='watch_wake' "+String(ui::activity.wakeOnWatch?"checked":"")+"> Wake screen for watched aircraft</label><p>Automatically returns to sleep when the match leaves, unless you interact with the knob. Radar range and filters apply.</p>";
     page+="<h2>Alert appearance</h2>";
     page+=alertColorInput("alert_watch","Watchlist colour",savedAlertStyle.watch);
     page+=alertColorInput("alert_heli","Helicopter colour",savedAlertStyle.helicopter);
@@ -367,21 +375,23 @@ void setupPage() {
     const char *effects[]={"Off","Steady","Gentle pulse","Flash"};
     for(int i=0;i<4;++i) page+="<option value='"+String(i)+"' "+String(i==int(savedAlertStyle.effect)?"selected":"")+">"+effects[i]+"</option>";
     page+="</select><p>Brightness is relative to the display brightness. Colours also identify watch markers. With several categories present, the outer ring prioritises military, then helicopters, then other watch matches. Off hides the outer ring; markers remain.</p>";
+    page+="<fieldset><legend>Info server features</legend><p>Everything in this section requires the optional Docker info server. Photos, routes, maps, weather, space stations and logbook appear when supported.</p>";
     page+="<label>Info server URL (optional)</label><input name='photo_url' maxlength='160' placeholder='http://192.168.1.10:8086' value='"+escape(photoBase)+"'>";
     page+="<p>Leave blank to disable external features. Capabilities are discovered automatically. Use your Docker server's LAN address.</p><button type='button' onclick=\"const b=this;b.disabled=true;fetch('/test-photo',{method:'POST',body:new URLSearchParams(new FormData(b.form))}).then(async r=>{document.getElementById('test-result').textContent=await r.text()}).catch(()=>{document.getElementById('test-result').textContent='Connection test failed'}).finally(()=>b.disabled=false)\">Test connection</button><p id='test-result' role='status'></p>";
     if(capsFlights) {
-        page+="<h2>Family flight</h2><input type='hidden' name='family_setting' value='1'><p>Free live tracking, including beyond radar range. Booking numbers and broadcast callsigns can differ. Confirm the flight/date with the airline; no arrival or delay estimates.</p>";
+        page+="<h3>Family flight</h3><input type='hidden' name='family_setting' value='1'><p>Free live tracking, including beyond radar range. Booking numbers and broadcast callsigns can differ. Confirm the flight/date with the airline; no arrival or delay estimates.</p>";
         page+="<label>Flight number (blank disables)</label><input name='family_flight' maxlength='10' placeholder='U2123' value='"+escape(familyFlight)+"'>";
         page+="<label>Actual callsign override (optional)</label><input name='family_callsign' maxlength='10' placeholder='EZY123' value='"+escape(familyCallsign)+"'>";
         page+="<label>Arrival airport IATA / ICAO (optional)</label><input name='family_arrival' maxlength='10' placeholder='LGW' value='"+escape(familyArrival)+"'>";
     }
     if(capsMaps) page+="<input type='hidden' name='map_setting' value='1'><label><input style='width:auto' type='checkbox' name='map_enabled' "+String(mapWanted?"checked":"")+"> Faint map background</label>";
-    page+="<h2>Home Assistant / observing</h2><input type='hidden' name='integration_setting' value='1'>";
+    page+="<h3>Home Assistant / observing</h3><input type='hidden' name='integration_setting' value='1'>";
     page+="<label><input style='width:auto' type='checkbox' name='integration_enabled' "+String(integrationEnabled?"checked":"")+"> Enable authenticated LAN integration</label>";
     page+="<p>Use this device URL and token in the Docker server configuration. Keep the token private; it grants display controls and access to aircraft/location data.</p><label>Device API token</label><input readonly value='"+escape(apiToken)+"'>";
     page+="<label><input style='width:auto' type='checkbox' name='satellite_alerts' "+String(satelliteAlerts?"checked":"")+"> Alert / wake for visible station passes (2 minutes ahead)</label>";
     page+="<label>Pickup alert distance from arrival airport (km)</label><input name='pickup_km' type='number' min='5' max='1000' value='"+String(pickupKm)+"'>";
     page+="<label><input style='width:auto' type='checkbox' name='pickup_arm'> Arm family pickup for this session (up to 24 hours)</label><p>Pickup keeps the screen awake. Reboot or explicit sleep disarms it. Requires configured flight, arrival airport and Docker device integration.</p>";
+    page+="</fieldset>";
     page+="<button>Save and start radar</button></form><p>Live aircraft data: adsb.fi. Hold the knob to reopen setup. Settings stay on this device.</p>";
     server.sendHeader("Cache-Control","no-store"); server.send(200,"text/html",page);
 }
@@ -460,6 +470,7 @@ void saveSetup() {
     ui::model.defaultRangeIndex=startRange;
     ui::alertStyle=newAlert;
     ui::model.watches=watches; ui::activity.sleepAfterMs=sleepMinutes*60000;
+    ui::activity.wakeOnWatch=server.hasArg("watch_wake"); prefs.putBool("watch_wake",ui::activity.wakeOnWatch);
     ui::activity.lastActivity=millis(); applyBrightness();
     lvgl_port_unlock();
     photoBase=newPhoto; prefs.putString("photo_url",photoBase); photoAttempt[0]=0; photoRetryAt=0; nextCapabilities=0; nextMap=0; nextStations=0; requestedMapRange=-1;
@@ -719,7 +730,7 @@ void fetchInsight(int view) {
         }
         if(previousItem[0]) { int subpage=0,first=-1; for(unsigned i=0;i<ui::infoCount;++i) if(!strcmp(ui::infoPages[i].item,previousItem)) { if(first<0) first=i; if(subpage++==previousSubpage) { ui::infoPage=i; first=-1; break; } } if(first>=0) ui::infoPage=first; }
         if(ui::infoPage>=int(ui::infoCount)) ui::infoPage=0;
-        if(view==5 && ui::infoCount && previousEntry!=ui::infoPages[ui::infoPage].entryId) ui::resetLog();
+        if(view==5 && ui::infoCount && previousEntry!=ui::infoPages[ui::infoPage].entryId) ui::resetLog(true);
         if(ui::infoCount) { ui::infoReceived=millis()-uint32_t(std::max(int64_t(0),age))*1000; ui::infoGenerated=generated; sky::copyText(ui::infoSource,doc["source"]); nextInsight=millis()+(view==2?20000:view>=4?60000:900000); }
         else snprintf(ui::infoMessage,sizeof(ui::infoMessage),"Data unavailable / retrying");
     }
@@ -734,8 +745,8 @@ void fetchRoute(const String &call) {
         sky::copyText(page.title,doc["pages"][0]["title"]); unsigned n=0;
         for(JsonVariantConst line:doc["pages"][0]["lines"].as<JsonArrayConst>()) { if(n>=7) break; sky::copyText(page.lines[n++],line); }
         if(n) nextRoute=millis()+21600000;
-        else snprintf(page.lines[0],sizeof(page.lines[0]),"No route available");
-    } else snprintf(page.lines[0],sizeof(page.lines[0]),"Route unavailable / retrying");
+        else snprintf(page.lines[0],sizeof(page.lines[0]),"Unavailable");
+    } else snprintf(page.lines[0],sizeof(page.lines[0]),"Unavailable");
     lvgl_port_lock(-1); ui::routeInfo=page; snprintf(ui::routeCall,sizeof(ui::routeCall),"%s",call.c_str()); ui::routeReady=true; lvgl_port_unlock();
 }
 void fetchLogbook() {
@@ -804,7 +815,6 @@ void fetchInfo() {
     fetchPhoto();
 }
 void fetch() {
-    if(ui::asleep.load()) return;
     if(time(nullptr)<1700000000) { status("Waiting for clock sync"); nextFetch=millis()+5000; return; }
     IPAddress address;
     if(WiFi.hostByName("opendata.adsb.fi",address)!=1) {
@@ -861,7 +871,15 @@ void fetch() {
                 status("Feed missing aircraft array");
             } else {
                 lvgl_port_lock(-1);
-                if(ui::model.filter==fetchFilter && ui::model.altitudeFilter==fetchAltitude) ui::model.ingest(incoming,millis());
+                if(ui::model.filter==fetchFilter && ui::model.altitudeFilter==fetchAltitude) {
+                    ui::model.ingest(incoming,millis());
+                    bool match=false;
+                    for(size_t i=0;i<ui::model.data.count;++i) {
+                        const auto &a=ui::model.data.aircraft[i];
+                        if(ui::model.visible(a,millis()) && sky::age(a,millis())<=20 && sky::watched(a,watches)) match=true;
+                    }
+                    ui::activity.observeWatch(match,millis());
+                }
                 lvgl_port_unlock(); ok=true; status("Live positions");
                 deviceLog.printf("[feed] Parsed %u entries; kept %u aircraft\n",unsigned(doc["ac"].size()),unsigned(incoming.count));
             }
@@ -901,7 +919,8 @@ void fetch() {
         else { char error[160]; int n=control.lastError(error,sizeof(error)); deviceLog.printf("[control] Failed: %d %s\n",n,error); }
         control.stop();
     }
-    retryDelay=ok?5000:std::min(uint32_t(120000),retryDelay*2);
+    lvgl_port_lock(-1); const uint32_t normalDelay=ui::activity.pollInterval(millis()); lvgl_port_unlock();
+    retryDelay=ok?normalDelay:std::min(uint32_t(120000),retryDelay*2);
     if(code==429) retryDelay=120000;
     deviceLog.printf("[feed] %s; next attempt in %lu ms\n",ok?"Success":"Failed",(unsigned long)retryDelay);
     nextFetch=millis()+retryDelay;
@@ -911,7 +930,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.10.0 / unified navigation and logbook");
+    deviceLog.println("EchoScope 0.11.0 / unified navigation and logbook");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
@@ -937,6 +956,7 @@ void setup() {
     startRange=std::min<uint32_t>(4,prefs.getUInt("start_range",2));
     ui::model.defaultRangeIndex=startRange; ui::model.rangeIndex=startRange;
     brightness=std::max<uint32_t>(5,std::min<uint32_t>(100,prefs.getUInt("brightness",100)));
+    ui::activity.wakeOnWatch=prefs.getBool("watch_wake",false);
     sleepMinutes=std::min<uint32_t>(1440,prefs.getUInt("sleep_min",60)); ui::activity.sleepAfterMs=sleepMinutes*60000;
     watchTypes=prefs.getString("watch_types",""); watchRegs=prefs.getString("watch_regs",""); watchCalls=prefs.getString("watch_calls","");
     ui::model.watches.types.set(watchTypes.c_str()); ui::model.watches.registrations.set(watchRegs.c_str()); ui::model.watches.callsigns.set(watchCalls.c_str());
@@ -1018,7 +1038,7 @@ void loop() {
     }
     server.handleClient(); if(apActive) dns.processNextRequest();
     if(!connected && configured && int32_t(now-nextReconnect)>=0) { WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=now+20000; }
-    if(ui::asleep.load()) { delay(20); return; }
+    if(ui::asleep.load()) { if(configured && connected && int32_t(now-nextFetch)>=0) fetch(); delay(20); return; }
     if(!configured) {
         static uint32_t lastDemo=0;
         if(uint32_t(now-lastDemo)>1000) { demoFrame(now); lastDemo=now; }

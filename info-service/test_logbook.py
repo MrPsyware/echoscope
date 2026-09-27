@@ -18,6 +18,15 @@ class Logbook(unittest.TestCase):
         self.a={'hex':'abc123','registration':'G-TEST','callsign':'EZY123','type':'A388','age_s':0,'distance_km':15,'east_km':10,'north_km':10,'watched':True}
         self.state={'screen':True,'lat':51.5,'lon':0,'aircraft':[self.a]}
         self.now=time.time()
+    def test_sleeping_tracking_and_unavailable_route(self):
+        self.state['screen']=False
+        self.store.ingest(self.state,self.now)
+        self.assertEqual(len(self.store.rows()),1)
+        with patch.object(spotting.insights,'route_data',return_value={}):
+            self.assertEqual(self.store.detail(1,None)['pages'][0]['lines'],['Unavailable'])
+        self.a['age_s']=61
+        self.store.ingest(self.state,self.now+30)
+        self.assertEqual(self.store.entry(1)['last'],self.now)
     def test_track_bound_gaps_and_new_encounters(self):
         for n in range(400):
             self.a['east_km']=10+n*.04; self.store.ingest(self.state,self.now+15*n)

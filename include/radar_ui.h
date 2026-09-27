@@ -66,14 +66,15 @@ inline void footer(size_t visible) {
     lv_draw_rect_dsc_t bg; lv_draw_rect_dsc_init(&bg); bg.bg_color=lv_color_hex(0x030D10);
     bg.bg_opa=LV_OPA_COVER; bg.border_width=0;
     lv_canvas_draw_rect(canvas,76,400,314,42,&bg);
-    const char *labels[]={zoom,flights,"ALT",sky::filterLabel(model.filter)};
-    const int active=model.altitudeMode?2:model.selectMode?1:0;
+    const char *labels[]={zoom,flights,"Alt","Type"};
+    const int active=model.rotationMode();
     for(int i=0;i<4;++i) {
-        text(402,labels[i],&lv_font_montserrat_14,i==active || (i==3 && model.filter!=sky::Filter::All)?green:muted,73+i*80,80);
+        text(402,labels[i],&lv_font_montserrat_14,i==active?green:muted,73+i*80,80);
         if(i==active) line(89+i*80,420,137+i*80,420,green,1);
     }
-    text(424,sky::altitudeLabel(model.altitudeFilter),&lv_font_montserrat_14,
-         model.altitudeFilter?sky::altitudeColor(model.altitudeFilter==1?0:model.altitudeFilter==2?5000:model.altitudeFilter==3?15000:model.altitudeFilter==4?30000:NAN):muted);
+    char values[64]; snprintf(values,sizeof(values),"%s / %s",sky::altitudeLabel(model.altitudeFilter),sky::filterLabel(model.filter));
+    text(424,values,&lv_font_montserrat_14,muted);
+
 }
 inline void renderStations(uint32_t now) {
     text(35,"SPACE STATIONS",&lv_font_montserrat_22,green);
@@ -114,7 +115,7 @@ inline lv_img_dsc_t slideImages[2]{};
 inline lv_obj_t *slideObjects[2]{};
 inline int slideDirection=1;
 inline void render(uint32_t now);
-inline bool routeAvailable() { return flightsEnabled && detailCall[0]; }
+inline bool routeAvailable() { return flightsEnabled; }
 inline void aircraftNavigation() {
     int count=0,index=-1;
     for(size_t i=0;i<model.data.count;++i) if(model.visible(model.data.aircraft[i],navigationNow)) { if(!std::strcmp(model.data.aircraft[i].hex,model.selected)) index=count; ++count; }
@@ -155,9 +156,10 @@ inline bool swipeDetails(int direction,uint32_t now) {
 }
 inline void renderRoute() {
     aircraftNavigation();
-    text(54,detailCall,&lv_font_montserrat_28,white);
+    text(54,detailCall[0]?detailCall:(model.selection()?model.selection()->registration:""),&lv_font_montserrat_28,white);
     text(97,"FLIGHT ROUTE",&lv_font_montserrat_18,green);
-    if(!routeReady || std::strcmp(routeCall,detailCall)) text(215,"Loading route...",&lv_font_montserrat_20,muted);
+    if(!detailCall[0]) text(215,"Unavailable",&lv_font_montserrat_20,muted);
+    else if(!routeReady || std::strcmp(routeCall,detailCall)) text(215,"Loading route...",&lv_font_montserrat_20,muted);
     else for(int i=0;i<7;++i) {
         lv_point_t bounds; lv_txt_get_size(&bounds,routeInfo.lines[i],&lv_font_montserrat_16,0,0,350,LV_TEXT_FLAG_NONE);
         text(145+i*32,routeInfo.lines[i],bounds.y>30?&lv_font_montserrat_12:&lv_font_montserrat_16,i==1?green:muted,58,350);
@@ -171,7 +173,7 @@ inline void render(uint32_t now) {
     if(!model.details) { routePage=false; detailHex[0]=0; }
     else if(const auto *a=model.selection()) {
         if(std::strcmp(detailHex,a->hex) || std::strcmp(detailCall,a->callsign)) {
-            snprintf(detailHex,sizeof(detailHex),"%s",a->hex); snprintf(detailCall,sizeof(detailCall),"%s",a->callsign); routePage=false;
+            snprintf(detailHex,sizeof(detailHex),"%s",a->hex); snprintf(detailCall,sizeof(detailCall),"%s",a->callsign);
         }
     }
     if(!routeAvailable()) routePage=false;
@@ -344,8 +346,9 @@ inline void tap(int x,int y,uint32_t now) {
         routePage=false; model.details=false; model.refresh(now); return;
     }
     if(y>=395) {
-        if(x>=313) { model.cycleFilter(now); requestFeed=true; }
-        else { model.selectMode=x>=153 && x<233; model.altitudeMode=x>=233; model.refresh(now); }
+        const auto previous=model.filter; const int band=model.altitudeFilter;
+        model.tapMode(std::max(0,std::min(3,(x-73)/80)),now);
+        if(previous!=model.filter || band!=model.altitudeFilter) requestFeed=true;
         return;
     }
     float east=(x-centre)*model.range()/radius, north=(centre-y)*model.range()/radius;

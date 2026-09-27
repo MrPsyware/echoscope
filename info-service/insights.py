@@ -159,7 +159,7 @@ def route_data(flight, download):
 
 def route_page(flight, route):
     if not route:
-        return page(flight, 'No route in the database', 'Try the transmitted callsign', 'Booking numbers can differ', 'No schedule or arrival estimate')
+        return page(flight, 'Unavailable')
     origin, dest = route.get('origin', {}), route.get('destination', {})
     return page(flight, clean(route.get('airline', {}).get('name')),
                 f"{origin.get('iata_code') or origin.get('icao_code') or '?'} > {dest.get('iata_code') or dest.get('icao_code') or '?'}",

@@ -1,8 +1,8 @@
 # EchoScope
 
-**New in 0.10.0:** consistent item/page navigation, an expanded photo/route/track
-logbook, six radar filters, a two-second touch shortcut to Information and a
-one-week disk photo cache. See [UI conventions](docs/INTERFACE.md) and
+**New in 0.11.0:** four consistent radar controls, page-preserving aircraft
+navigation, tidier menus and setup, and sleeping watchlist monitoring with optional
+automatic wake. See [UI conventions](docs/INTERFACE.md) and
 [server/integration setup](info-service/INTEGRATION.md).
 
 
@@ -25,7 +25,7 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 - N/E/S/W compass labels and a decorative radar sweep.
 - Local Wi-Fi/location setup, saved settings, stale-data indication and reconnection handling.
 
-Latest firmware: **0.10.0**. Update both firmware and the Docker information server for the enhanced logbook.
+Latest firmware: **0.11.0**. Update both firmware and the Docker information server for the enhanced logbook.
 
 ## Hardware status
 
@@ -180,7 +180,7 @@ The radar radius is 210 pixels. Normal live operation has no persistent status b
 
 The filter stays in the bottom footer beside ALT. It no longer hides, and the north marker stays visible.
 
-After the configured idle period (one hour by default) without touch, press or rotation, the panel turns off and radar rendering and new HTTP feed requests pause. An already-running request may finish. Touch/knob sensing and Wi-Fi remain active; this is display standby, not ESP32 deep sleep. The first interaction wakes the display without changing settings or selection, and requests fresh aircraft data. Serial `[power]` messages mark sleep and wake.
+After the configured idle period (one hour by default) without touch, press or rotation, the panel and radar rendering turn off. Aircraft polling continues every 30 seconds, returning to the normal 5-second interval while a fresh watchlist match is visible. Request durations and error backoff can extend these intervals. Touch/knob sensing and Wi-Fi remain active; this is display standby, not ESP32 deep sleep. The first interaction wakes the display without changing settings or selection, and requests fresh aircraft data. Serial `[power]` messages mark sleep and wake.
 
 ### Optional aircraft photos (0.3.0)
 
@@ -204,7 +204,7 @@ Hold for five seconds and open the displayed setup address to configure:
 - **Watchlists:** comma/space-separated types, registrations and callsigns, up to 16 entries per field. Matching ignores case; a trailing `*` matches a prefix (`B74*`, `RCH*`). `A380` also matches the ICAO `A388` code. Other type entries use feed type codes.
 - **Military/helicopter watches:** optional category switches; classifications depend on the feed's metadata.
 
-Visible watch matches have a small category-coloured ring. The configurable outer ring activates while any matching aircraft has a position no older than 20 seconds. Alerts respect the selected range and filters, stop when positions age or leave coverage, and never trigger for demo data. Watch matches receive priority when retaining the nearest 64 matching aircraft. Monitoring pauses during sleep; alerts do not wake the screen. Saved watch rules and display settings survive reboot. Flight details still open by touch and return with a click/tap.
+Visible watch matches have a small category-coloured ring. The configurable outer ring activates while any matching aircraft has a position no older than 20 seconds. Alerts respect the selected range and filters, stop when positions age or leave coverage, and never trigger for demo data. Watch matches receive priority when retaining the nearest 64 matching aircraft. Enable **Wake screen for watched aircraft** in setup to automatically wake on fresh visible matches. It is off by default and needs no info server. Automatic wake returns to sleep when a successful feed has no match, or after 60 seconds without confirmation during a feed failure. Interaction cancels automatic return and starts the normal idle timer. Saved watch rules and display settings survive reboot. Flight details still open by touch and return with a click/tap.
 
 Space-station predictions are available through the optional information server; they use a separate orbital feed from aircraft data.
 
@@ -222,7 +222,7 @@ make monitor IP=192.168.2.151
 
 Upload builds the application, verifies the target protocol and available partition size, and sends it to the inactive slot over local HTTP. The device checks the ESP32-S3 application header, exact byte count and MD5 checksum before selecting the new firmware and rebooting. Interrupted or invalid transfers do not select the incomplete image. A syntactically valid firmware with a runtime bug is not automatically rolled back; keep USB available for recovery. Physical setup unlock is required for every upload session (the existing five-minute window). If the build takes longer, hold again and retry. Only upload trusted EchoScope application firmware, never a merged image. This LAN service is not intended for Internet exposure.
 
-Network monitoring is read-only and does not need setup unlocked. It replays up to 8 KiB of recent application diagnostics, then polls for new logs; it reconnects after Wi-Fi loss/reboot and reports overwritten log data. Feed, TLS, input, power and display diagnostics are included. ROM/bootloader, panic output and Arduino/SDK internal logs still require USB. Feed requests can delay log delivery because the HTTP server shares the network loop. Monitoring does not wake the display; sleep still pauses aircraft requests.
+Network monitoring is read-only and does not need setup unlocked. It replays up to 8 KiB of recent application diagnostics, then polls for new logs; it reconnects after Wi-Fi loss/reboot and reports overwritten log data. Feed, TLS, input, power and display diagnostics are included. ROM/bootloader, panic output and Arduino/SDK internal logs still require USB. Feed requests can delay log delivery because the HTTP server shares the network loop. Monitoring does not wake the display; sleep continues reduced-rate aircraft monitoring.
 
 Omit `IP` to retain USB upload/monitoring. USB app upload also resets OTA selection to app0, so it works after previous wireless updates while preserving Wi-Fi/location/watchlist settings. Docker is not involved. Dotted IPv4 addresses are preferred; commas are normalized for convenience.
 
@@ -267,7 +267,7 @@ Sources: [adsb.fi](https://github.com/adsbfi/opendata), [adsbdb](https://www.ads
 
 ### Aircraft detail pages
 
-Open an aircraft as usual. The segmented outer ring indicates the selected aircraft. When a route is offered, use `<` / `>` to cycle between photo/telemetry and the route. Horizontal swipes remain supported. A centre tap or short mechanical press on either page returns to radar. Rotate to change aircraft; the new aircraft starts on its first page.
+Open an aircraft as usual. The segmented outer ring indicates the selected aircraft. When a route is offered, use `<` / `>` to cycle between photo/telemetry and the route. Horizontal swipes remain supported. A centre tap or short mechanical press on either page returns to radar. Rotate to change aircraft; the selected route/details page stays open for the new aircraft. Logbook route/trace pages behave the same way.
 
 The route page shows the database origin/destination and airline when known. This is not a filed flight plan with waypoints, nor confirmed operational routing or ETA. An unavailable route shows a retry status instead of another aircraft's route. Routes are prefetched while viewing details, and a route you opened stays tied to its callsign even if that aircraft leaves radar coverage.
 

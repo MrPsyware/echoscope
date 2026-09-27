@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0
+
+- Standardise Range, Aircraft, Alt and Type: click to change mode, tap to select, tap again to advance its value. Show Alt and Type values together.
+- Keep the selected route/trace page while changing aircraft or log entries; reduce missing-route text to “Unavailable”.
+- Group the Information menu and put server-dependent setup options under Info server features.
+- Continue sleeping aircraft polling every 30 seconds, with 5-second polling for fresh visible watch matches and optional automatic screen wake/return to sleep. Preserve error backoff and explicit remote sleep.
+- Keep interesting-aircraft logbook recording active while the screen is off.
+
 ## 0.10.0
 
 - Standardize navigation: clockwise rotation cycles items, outer ring segments highlight the current item, side arrows cycle pages, and centre taps/short presses return to radar. Retain aircraft page slides/swipes.

@@ -17,7 +17,8 @@ inline bool infoAvailable() { return stargazingEnabled || highlightsEnabled || s
 inline bool infoOption(int option) {
     return option==0?satellitesEnabled:option==1?weatherEnabled:option==2?flightsEnabled && familyNumber[0]:option==3?airportsEnabled:option==4?stargazingEnabled:option==5?highlightsEnabled:false;
 }
-inline void resetLog();
+inline void resetLog(bool preservePage=false);
+inline constexpr int infoOrder[]={5,2,3,1,4,0};
 inline void changeLogPage(int direction);
 inline void renderLog(uint32_t now);
 inline bool sameItem(int a,int b) { return a==b || (infoPages[a].item[0] && !std::strcmp(infoPages[a].item,infoPages[b].item)); }
@@ -37,22 +38,28 @@ inline void rotateInfo(int delta) {
         if(!infoCount) return;
         int starts[9]{},count=0; for(int i=0;i<int(infoCount);++i) if(itemFirst(i)==i) starts[count++]=i;
         const int target=(itemIndex()-delta%count+count)%count;
-        if(starts[target]!=itemFirst(infoPage)) { infoPage=starts[target]; resetLog(); }
+        if(starts[target]!=itemFirst(infoPage)) {
+            int sub=0; for(int i=0;i<infoPage;++i) if(sameItem(i,infoPage)) ++sub;
+            const int first=starts[target]; infoPage=first;
+            for(int i=first+1;i<int(infoCount) && sub>0;++i) if(sameItem(first,i)) { infoPage=i; --sub; }
+            resetLog(true);
+        }
         return;
     }
     if(!infoAvailable()) return;
     int step=delta<0?1:-1;
     for(int n=0;n<std::abs(delta);++n) for(int i=0;i<6;++i) {
-        infoSelection=(infoSelection+step+6)%6;
+        int index=0; while(infoOrder[index]!=infoSelection) ++index;
+        infoSelection=infoOrder[(index+step+6)%6];
         if(infoOption(infoSelection)) break;
     }
 }
 inline void ensureInfoSelection() {
     if(infoOption(infoSelection)) return;
-    for(int i=0;i<6;++i) if(infoOption(i)) { infoSelection=i; return; }
+    for(int i:infoOrder) if(infoOption(i)) { infoSelection=i; return; }
 }
 inline void openInfo() {
-    infoView=0; satelliteView=false; model.details=false; infoMenu=true; infoSelection=0; ensureInfoSelection();
+    infoView=0; satelliteView=false; model.details=false; infoMenu=true; infoSelection=5; ensureInfoSelection();
 }
 inline void pressInfo() {
     if(infoView) { infoView=0; infoMenu=false; model.details=false; return; }
@@ -68,9 +75,9 @@ inline void renderInfo(uint32_t now) {
     if(infoMenu) {
         text(65,"INFORMATION",&lv_font_montserrat_24,green);
         const char *labels[]={"Space stations","Weather / clouds","Family flight","Nearby airports","Stargazing tonight","Logbook"};
-        int selected=0,total=0; for(int i=0;i<6;++i) if(infoOption(i)) { if(i==infoSelection) selected=total; ++total; } itemRing(selected,total);
+        int selected=0,total=0; for(int i:infoOrder) if(infoOption(i)) { if(i==infoSelection) selected=total; ++total; } itemRing(selected,total);
         int row=0;
-        for(int i=0;i<6;++i) if(infoOption(i)) {
+        for(int i:infoOrder) if(infoOption(i)) {
             const int y=118+row++*41;
             text(y,labels[i],&lv_font_montserrat_20,i==infoSelection?green:muted);
             if(i==infoSelection) line(110,y+28,356,y+28,green,2);
@@ -117,7 +124,7 @@ inline void tapInfo(int x,int y) {
     }
     if(y>=365) { infoMenu=false; return; }
     int row=0;
-    for(int i=0;i<6;++i) if(infoOption(i)) {
+    for(int i:infoOrder) if(infoOption(i)) {
         const int top=110+row++*41;
         if(y>=top && y<top+41) { infoSelection=i; pressInfo(); return; }
     }

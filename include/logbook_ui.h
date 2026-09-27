@@ -7,7 +7,7 @@ inline sky::Point logPoints[192]{};
 inline bool logGaps[192]{};
 inline unsigned logPointCount=0;
 inline lv_img_dsc_t logMapImage{};
-inline void resetLog() { logReady=false; logMapReady=false; logEntry=0; logPage=0; logPointCount=0; }
+inline void resetLog(bool preservePage) { logReady=false; logMapReady=false; logEntry=0; if(!preservePage) logPage=0; logPointCount=0; }
 inline void changeLogPage(int direction) { do { logPage=(logPage+direction+3)%3; } while(logPage==1 && !flightsEnabled); }
 inline void renderLog(uint32_t now) {
     if(!infoCount) { text(75,"LOGBOOK",&lv_font_montserrat_24,green); text(210,infoMessage,&lv_font_montserrat_18,muted); return; }

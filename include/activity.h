@@ -10,15 +10,27 @@ struct Activity {
     static constexpr uint32_t filterTimeout=10000, sleepTimeout=3600000;
     uint32_t lastActivity=0,lastTouch=0, sleepAfterMs=sleepTimeout;
     bool sleeping=false,filterVisible=true;
+    bool wakeOnWatch=false,autoAwake=false,watchPresent=false,suppressWatch=false;
+    uint32_t watchSeen=0;
+    void observeWatch(bool present,uint32_t now) { watchPresent=present; if(!present) suppressWatch=false; if(present) watchSeen=now; }
+    bool freshWatch(uint32_t now) const { return watchPresent && uint32_t(now-watchSeen)<60000; }
+    uint32_t pollInterval(uint32_t now) const { return sleeping && !freshWatch(now)?30000:5000; }
+    bool updateWatch(uint32_t now) {
+        const bool before=sleeping;
+        if(sleeping && !suppressWatch && wakeOnWatch && freshWatch(now)) { sleeping=false; autoAwake=true; }
+        else if(autoAwake && (!wakeOnWatch || !freshWatch(now))) { sleeping=true; autoAwake=false; }
+        return before!=sleeping;
+    }
+    void sleepExplicitly() { sleeping=true; autoAwake=false; suppressWatch=true; }
     bool interact(uint32_t now,bool touch=false) {
-        const bool woke=sleeping; sleeping=false; lastActivity=now;
+        autoAwake=false; suppressWatch=false; const bool woke=sleeping; sleeping=false; lastActivity=now;
         if(touch) lastTouch=now;
         return woke;
     }
     bool tick(uint32_t now,bool held=false) {
         if(held) lastActivity=now;
         if(uint32_t(now-lastTouch)>=filterTimeout) filterVisible=false;
-        if(!sleeping && sleepAfterMs && uint32_t(now-lastActivity)>=sleepAfterMs) { sleeping=true; return true; }
+        if(!sleeping && !autoAwake && sleepAfterMs && uint32_t(now-lastActivity)>=sleepAfterMs) { sleeping=true; return true; }
         return false;
     }
     bool tapFilter(uint32_t now) {
