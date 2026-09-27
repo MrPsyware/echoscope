@@ -174,3 +174,25 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
   change to the user's MQTT/Home Assistant installation was performed. Remaining
   on-device check: token-enabled control responses, overnight alert timing, actual
   feed/HTTP latency and sleep/wake interaction on the knob.
+
+## Version 0.10.0 — unified navigation and illustrated logbook
+
+- Firmware host model/input/JSON/photo/network checks and ESP32-S3 build passed.
+  Application: 1,764,188 bytes (26.9% of OTA slot); static RAM: 96,900 bytes (29.6%).
+- 36 Python service tests passed. Added old-history migration, bounded track
+  sampling, reception gaps versus stationary updates, transient missing callsigns,
+  late registration/type metadata, route snapshots, bounded packets, escaped web
+  detail strings, photo disk-cache expiry/corruption/clearing and cache-button token.
+- Native LVGL assertions exercised grouped/non-contiguous item navigation, page
+  wrap, detail-to-radar, menu selection, logbook arrows and filter controls. Native
+  renderings of the actual firmware UI were inspected: radar footer, segmented
+  aircraft/menu rings, sighting text/photo, route, grid track and OpenStreetMap track.
+  Renderings used labelled fixture flights/paths, not the user's live aircraft.
+- Docker build passed. Isolated read-only-root/256 MiB container returned log detail
+  JSON, attributed real thumbnail, web detail HTML and 352,808-byte historical map
+  packet. The clear-cache form returned HTTP 200 and removed thumbnails while the
+  fixture SQLite history and map tile cache remained present.
+- Two-second touch-hold threshold, one-shot firing, blocked hold and millis rollover
+  are covered in host tests. Physical touch duration/rotation and on-device frame
+  timing still need user confirmation. No firmware was flashed and no user Docker
+  deployment/history was modified; migration ran against test databases only.

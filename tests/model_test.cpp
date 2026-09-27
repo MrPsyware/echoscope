@@ -3,6 +3,7 @@
 #include "detail_gesture.h"
 #include "activity.h"
 #include "button_debounce.h"
+#include "touch_hold.h"
 #include "network_policy.h"
 #include <cassert>
 #include <iostream>
@@ -129,15 +130,24 @@ int main() {
     assert(!idle.interact(3615200));
     idle.lastActivity=UINT32_MAX-100; assert(!idle.tick(100));
     idle.interact(0); assert(!idle.tick(Activity::sleepTimeout,true));
+    TouchHold hold; hold.begin(100); assert(!hold.update(2099,true)); assert(hold.update(2100,true)); assert(!hold.update(2200,true));
+    hold.begin(UINT32_MAX-1000); assert(!hold.update(998,true)); assert(hold.update(999,true));
+    hold.begin(0); assert(!hold.update(3000,false));
     Model filtered; filtered.data.count=2;
     strcpy(filtered.data.aircraft[0].hex,"civil"); filtered.data.aircraft[0].position={1,0};
     strcpy(filtered.data.aircraft[1].hex,"mil"); filtered.data.aircraft[1].position={2,0};
     filtered.data.aircraft[1].military=true;
+    filtered.cycleFilter(0); assert(filtered.filter==Filter::Watch && !filtered.selected[0]);
+    filtered.watches.military=true; filtered.refresh(0); assert(!strcmp(filtered.selected,"mil"));
+    filtered.cycleFilter(0); assert(filtered.filter==Filter::Rotorcraft && !filtered.selected[0]);
     filtered.cycleFilter(0); assert(filtered.filter==Filter::Military);
     assert(!strcmp(filtered.selected,"mil")); assert(filtered.hit(1,0,0.2f,0)==-1);
     filtered.selectMode=true; filtered.rotate(1,0); assert(!strcmp(filtered.selected,"mil"));
     filtered.cycleFilter(0); assert(!filtered.selected[0]);
+    filtered.cycleFilter(0); assert(filtered.filter==Filter::Large && !filtered.selected[0]);
     filtered.cycleFilter(0); assert(!strcmp(filtered.selected,"civil"));
+    Aircraft light; light.kind=AircraftKind::Light; assert(matches(light,Filter::Light) && !matches(light,Filter::Large));
+    light.kind=AircraftKind::Large; assert(matches(light,Filter::Large) && !matches(light,Filter::Rotorcraft));
     // Capture a complete short press while the UI is blocked for a 140 ms render.
     ButtonDebounce button;
     assert(button.sample(true,100)==ButtonDebounce::None);

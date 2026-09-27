@@ -47,7 +47,7 @@ def parse_command(key,payload):
     if key=='brightness':
         if not value.isdigit() or not 5<=int(value)<=100: raise ValueError('Brightness 5-100')
         return {key:int(value)}
-    if key=='page' and value in ('radar','aircraft','route','information','stations','weather','family','airports','stargazing','highlights'): return {key:value}
+    if key=='page' and value in ('radar','aircraft','route','information','stations','weather','family','airports','stargazing','highlights','logbook'): return {key:value}
     if key=='aircraft':
         if value=='None': return {'page':'radar'}
         # Select entity uses HEX / callsign; JSON consumers can send plain HEX.
@@ -178,7 +178,9 @@ class Bridge:
                 self.state=state; self.last_online=time.time(); self.sync(state); self.store.ingest(state)
                 if time.monotonic()>=self.next_work:
                     self.next_work=time.monotonic()+30
-                    try: self.work(state)
+                    try:
+                        self.work(state)
+                        if insights.FLIGHTS: self.store.capture_route(self.download)
                     except (OSError,ValueError,KeyError,TypeError) as error: LOG.warning('Background information unavailable: %s',type(error).__name__)
             except (OSError,ValueError,KeyError,TypeError,sqlite3.Error) as error:
                 self.publish('availability','offline',True); LOG.warning('Device polling unavailable: %s',type(error).__name__)

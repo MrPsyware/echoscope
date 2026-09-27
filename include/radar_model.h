@@ -38,7 +38,7 @@ inline bool clipToCircle(Point &a,Point &b,float radius) {
     a={start.east+lo*d.east,start.north+lo*d.north};
     b={start.east+hi*d.east,start.north+hi*d.north}; return true;
 }
-enum class Filter { All, Military, Rotorcraft };
+enum class Filter { All, Military, Rotorcraft, Watch, Light, Large };
 enum class AircraftKind { Unknown, Light, Large, Rotorcraft };
 struct Aircraft {
     char hex[12]{}, callsign[16]{}, registration[16]{}, type[12]{}, description[80]{};
@@ -48,7 +48,7 @@ struct Aircraft {
     float altitude = NAN, speed = NAN, track = NAN, verticalRate = NAN, positionAge = 0;
     uint32_t received = 0;
 };
-inline bool matches(const Aircraft &a,Filter filter) { return filter==Filter::All || (filter==Filter::Military?a.military:a.kind==AircraftKind::Rotorcraft); }
+
 inline int altitudeBand(float altitude) {
     return !std::isfinite(altitude)?5:altitude<5000?1:altitude<15000?2:altitude<30000?3:4;
 }
@@ -63,6 +63,20 @@ inline uint32_t altitudeColor(float altitude) {
 inline bool watched(const Aircraft &a,const Watches &w) {
     return (w.military && a.military) || (w.rotorcraft && a.kind==AircraftKind::Rotorcraft) ||
         w.types.matches(a.type,true) || w.registrations.matches(a.registration) || w.callsigns.matches(a.callsign);
+}
+inline bool matches(const Aircraft &a,Filter filter,const Watches &w=Watches{}) {
+    switch(filter) {
+        case Filter::All:return true;
+        case Filter::Military:return a.military;
+        case Filter::Rotorcraft:return a.kind==AircraftKind::Rotorcraft;
+        case Filter::Watch:return watched(a,w);
+        case Filter::Light:return a.kind==AircraftKind::Light;
+        case Filter::Large:return a.kind==AircraftKind::Large;
+    }
+    return false;
+}
+inline const char *filterLabel(Filter filter) {
+    switch(filter) { case Filter::All:return "ALL";case Filter::Watch:return "WCH";case Filter::Rotorcraft:return "HEL";case Filter::Military:return "MIL";case Filter::Light:return "LGT";case Filter::Large:return "LRG"; } return "ALL";
 }
 inline AlertKind alertKind(const Aircraft &a,const Watches &w) {
     if(!watched(a,w)) return AlertKind::None;
@@ -115,7 +129,7 @@ struct Model {
         details=false; demo=true; hasUpdate=false; lastUpdate=0;
         if(trails) for(size_t i=0;i<maxAircraft;++i) trails[i].clear();
     }
-    bool visible(const Aircraft &a,uint32_t now) const { return matches(a,filter) && (!altitudeFilter || altitudeBand(a.altitude)==altitudeFilter) && distance(a.position)<=range() && age(a,now)<=60; }
+    bool visible(const Aircraft &a,uint32_t now) const { return matches(a,filter,watches) && (!altitudeFilter || altitudeBand(a.altitude)==altitudeFilter) && distance(a.position)<=range() && age(a,now)<=60; }
     AlertKind activeAlert(uint32_t now) const {
         AlertKind active=AlertKind::None;
         if(demo) return active;
@@ -186,7 +200,7 @@ struct Model {
         else idx=((idx+delta)%count+count)%count;
         select(choices[idx]);
     }
-    void cycleFilter(uint32_t now) { filter=Filter((int(filter)+1)%3); details=false; refresh(now); }
+    void cycleFilter(uint32_t now) { const Filter sequence[]={Filter::All,Filter::Watch,Filter::Rotorcraft,Filter::Military,Filter::Light,Filter::Large}; for(int i=0;i<6;++i) if(filter==sequence[i]) { filter=sequence[(i+1)%6]; break; } details=false; refresh(now); }
     void press(uint32_t now) {
         if(details) { details=false; refresh(now); return; }
         if(altitudeMode) altitudeMode=false;

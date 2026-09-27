@@ -1,10 +1,10 @@
 # EchoScope
 
-**New in 0.9.0:** Home Assistant/MQTT controls, family pickup alerts, a persistent
-spotting log, stargazing outlook and visible station countdown alerts.
-See [integration setup and controls](info-service/INTEGRATION.md). Update both the
-firmware and Docker service; enable LAN integration on the knob and configure the
-server's `.env` for background alerts/history and MQTT.
+**New in 0.10.0:** consistent item/page navigation, an expanded photo/route/track
+logbook, six radar filters, a two-second touch shortcut to Information and a
+one-week disk photo cache. See [UI conventions](docs/INTERFACE.md) and
+[server/integration setup](info-service/INTEGRATION.md).
+
 
 
 *A miniature radar station for the aircraft overhead.*
@@ -25,24 +25,29 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 - N/E/S/W compass labels and a decorative radar sweep.
 - Local Wi-Fi/location setup, saved settings, stale-data indication and reconnection handling.
 
-Latest firmware: **0.2.3**. It includes the two-transitions-per-detent adjustment for one action per physical click.
+Latest firmware: **0.10.0**. Update both firmware and the Docker information server for the enhanced logbook.
 
 ## Hardware status
 
-The user has confirmed working display, Wi-Fi, live aircraft retrieval, touch/details and rotary input on the VIEWE device. Version 0.1.3 fixed the observed TLS stalls by separating network and display work across CPU cores. Versions 0.2.1–0.2.2 compile successfully; the latest detent adjustment, selected trail styling and compass additions still need confirmation on the physical device. Host interaction tests and actual LVGL screen rendering are documented in [VALIDATION.md](VALIDATION.md).
+The user has confirmed the existing display, Wi-Fi, radar, touch and rotary controls on the VIEWE device. New release checks and remaining physical-device validation are recorded in [VALIDATION.md](VALIDATION.md).
 
 ## Controls
 
-| Input | Radar view | Flight details |
-|---|---|---|
-| Rotate | Zoom, cycle visible aircraft or choose an altitude band | Cycle visible aircraft |
-| Press without touching the screen | Cycle range → aircraft → altitude mode | Return to radar, preserving the mode |
-| Touch an aircraft | Select it and open details | Tap to return to radar |
-| Touch blank radar space | Open the highlighted aircraft | Tap to return to radar |
-| Tap bottom range / aircraft count / ALT | Select the corresponding rotation mode | — |
-| Hold knob 5 seconds | Open Wi-Fi/location setup | Open Wi-Fi/location setup |
+| Input | Behaviour |
+|---|---|
+| Rotate on radar | Selected mode: aircraft, altitude or range; starts in aircraft mode |
+| Rotate on a detail/info view | Cycle items clockwise to next; outer ring highlights the item |
+| Tap `<` / `>` | Cycle pages within the item; arrows appear only when relevant |
+| Centre tap or short mechanical press on a detail view | Return to radar |
+| Tap aircraft / blank radar | Open tapped / highlighted aircraft |
+| Tap bottom range / plane count / ALT | Choose rotation mode (active label is underlined) |
+| Tap bottom filter | Cycle ALL / WCH / HEL / MIL / LGT / LRG |
+| Touch and hold still for 2 seconds | Open Information; rotate and press or tap an entry to open it |
+| Hold mechanical button for 5 seconds | Open setup |
 
-The active footer section is bold and brighter: **50 km** for zoom, **2 planes** for selection, or **ALT** for altitude filtering. Touch and mechanical-click events are combined into one gesture, so pressing the screen does not immediately undo the touch action. A bare click is deferred by 180 ms to allow touch detection.
+Touch and mechanical-click events remain combined into one gesture. A two-second
+screen hold consumes the release tap, so it cannot immediately close the menu.
+The old top filter and INFO button are removed. See [UI conventions](docs/INTERFACE.md).
 
 ## First installation
 
@@ -169,11 +174,11 @@ Tap the top radar label to cycle **All → Military → Rotorcraft**. Filtering 
 
 Aircraft use light/large fixed-wing or rotorcraft symbols when classified; unknown classes use a diamond. Classification uses emitter category with a small model-code fallback for common rotorcraft. The independent **M** badge marks military-tagged aircraft. Selected symbols and trails stay orange. Full model descriptions appear on the details screen when supplied.
 
-The radar radius is now 200 pixels (previously 182). Normal live operation has no persistent status banner; stale/error messages remain and adsb.fi attribution appears on the details screen.
+The radar radius is 210 pixels. Normal live operation has no persistent status banner; stale/error messages remain and adsb.fi attribution appears on the details screen.
 
-### Auto-hide and standby (0.2.9)
+### Standby
 
-After 10 seconds without touching the screen, the filter disappears and reveals the north marker. Its touch area stays at the top: the first tap reveals the current filter; later taps cycle it. Touching the screen extends its visible period, while turning/pressing the knob does not reveal a hidden filter.
+The filter stays in the bottom footer beside ALT. It no longer hides, and the north marker stays visible.
 
 After the configured idle period (one hour by default) without touch, press or rotation, the panel turns off and radar rendering and new HTTP feed requests pause. An already-running request may finish. Touch/knob sensing and Wi-Fi remain active; this is display standby, not ESP32 deep sleep. The first interaction wakes the display without changing settings or selection, and requests fresh aircraft data. Serial `[power]` messages mark sleep and wake.
 
@@ -181,7 +186,7 @@ After the configured idle period (one hour by default) without touch, press or r
 
 The [information server](info-service/README.md) runs in Docker on another LAN computer. Start it with `make docker` from the repository root (listens on `0.0.0.0:8086`), then hold the knob for 5 seconds to unlock its web setup. Enter `http://YOUR-SERVER-IP:8086` in **Info server URL**, test and save. Leaving it blank disables photos.
 
-Aircraft details automatically request the actual aircraft's thumbnail by registration when photos are enabled. The same page shows aircraft type, altitude, speed, distance/bearing, track and position age alongside the photo. Turn to select another flight; tap or press to return to radar. Photos retain photographer credit; open `http://KNOB-IP/photo` for the original-photo link. The service does not store photographs on disk. Missing photos and unavailable servers leave the radar usable. New photo requests pause during standby, and obsolete responses are discarded. The firmware accepts only the bounded image protocol; it does not decode JPEGs. See the service README for deployment, provider and protocol details.
+Aircraft details automatically request the actual aircraft's thumbnail by registration when photos are enabled. The same page shows aircraft type, altitude, speed, distance/bearing, track and position age alongside the photo. Turn to select another flight; tap or press to return to radar. Photos retain photographer credit; open `http://KNOB-IP/photo` for the original-photo link. The service caches attributed thumbnails on disk for seven days; its `/cache` page clears them manually. Missing photos and unavailable servers leave the radar usable. New photo requests pause during standby, and obsolete responses are discarded. The firmware accepts only the bounded image protocol; it does not decode JPEGs. See the service README for deployment, provider and protocol details.
 
 The radar radius is now 210 pixels.
 
@@ -242,13 +247,13 @@ Set **Startup range** in web setup to 5, 10, 25, 50 or 100 km. The default remai
 
 The Docker companion is now **EchoScope Info Server**. Update it with `git pull` and `make docker` on your server, then update the knob firmware. The existing server URL and port work unchanged. See [server setup, sources and options](info-service/README.md).
 
-The server advertises available photos, maps and space-station predictions. Absent features disappear automatically. Flight details use their full text layout until a matching photo has loaded successfully. A faint, range-matched OpenStreetMap background includes visible attribution; a background toggle appears in setup when supported. The **INFO >** radar menu offers a separate station sky view only when the server has fresh orbital data. Rotate to choose ISS/Tiangong; tap or press to return. Pass times use UTC and a 10° elevation threshold; predictions do not imply naked-eye visibility.
+The server advertises available photos, maps and space-station predictions. Absent features disappear automatically. Flight details use their full text layout until a matching photo has loaded successfully. A faint, range-matched OpenStreetMap background includes visible attribution; a background toggle appears in setup when supported. The Information menu (hold the screen for two seconds) offers a separate station sky view only when the server has fresh orbital data. Rotate to choose ISS/Tiangong; tap or press to return. Pass times use UTC and a 10° elevation threshold; predictions do not imply naked-eye visibility.
 
 The former `photo-service/` directory is now `info-service/`; `make docker` handles it. The Compose project/service IDs remain unchanged for in-place upgrades. `INFO_PORT` is the new port override; `PHOTO_PORT` still works. No external server is required for the aircraft radar.
 
 ### Family flights and weather (0.7.0)
 
-Update both the information server (`git pull` then `make docker`) and the knob firmware. Tap **INFO >** on the radar, rotate to choose a feature and press to open it. Rotate through pages; press to return to the menu, then tap its bottom area to return to the radar. Unavailable features are hidden. Space stations retain their existing rotate-to-select controls and tap/press returns to the radar.
+Update both the information server (`git pull` then `make docker`) and the knob firmware. Hold the screen still for two seconds to open Information. Rotate to choose an item and press or tap to open it. Inside a view, rotation changes items and side arrows change pages within the item. Centre tap or short press returns to radar. Unavailable features are hidden.
 
 In web setup, **Family flight** appears after the server advertises flight support (allow up to a minute after adding/changing the server URL). Enter a flight number, an optional actual callsign override and an arrival airport such as `LGW` or `EGKK` for Gatwick. Leave the flight number blank to hide this menu item. An easyJet booking number can differ from its transmitted `EZY`/`EJU`/`EZS` callsign: the free route database tries to resolve it, but an override may be needed. The example `U2123` is only a format example, not a Gatwick flight recommendation.
 
@@ -260,15 +265,12 @@ Family tracking requests the specific callsign independently of the local radar 
 
 Sources: [adsb.fi](https://github.com/adsbfi/opendata), [adsbdb](https://www.adsbdb.com/), [Open-Meteo](https://open-meteo.com/) (CC BY 4.0), and [OurAirports](https://ourairports.com/data/) (public domain). The free adsb.fi and Open-Meteo services are intended for personal/non-commercial use under their respective terms.
 
-### Swipeable aircraft details (0.8.0)
+### Aircraft detail pages
 
-Open an aircraft as usual. When the information server offers flight routes and the aircraft has a callsign, a thin green quarter-circle appears on the right rim. **Swipe left** to slide to that aircraft's route page. **Swipe right** to return to its photo/telemetry details. You can also tap the rim marker; pressing the knob on the route page returns to details. A centre tap on either aircraft page returns directly to radar. A bare press on the route page returns to the first details page. The arc touch band extends inward and covers the arc ends. Turn the knob to change aircraft; the page resets to details for the new selection.
+Open an aircraft as usual. The segmented outer ring indicates the selected aircraft. When a route is offered, use `<` / `>` to cycle between photo/telemetry and the route. Horizontal swipes remain supported. A centre tap or short mechanical press on either page returns to radar. Rotate to change aircraft; the new aircraft starts on its first page.
 
 The route page shows the database origin/destination and airline when known. This is not a filed flight plan with waypoints, nor confirmed operational routing or ETA. An unavailable route shows a retry status instead of another aircraft's route. Routes are prefetched while viewing details, and a route you opened stays tied to its callsign even if that aircraft leaves radar coverage.
 
 The 380 ms eased transition moves cached LVGL images rather than redrawing text on every animation frame. Two optional 466x466 RGB565 snapshots use 868,624 bytes of PSRAM (about 0.83 MiB). If allocation fails, swipes still change pages immediately. Animation responsiveness depends on the physical display; native previews cannot measure hardware frame rate.
 
 Update both parts for the new weather cards: `git pull && make docker` on the server, then pull the firmware checkout and use your normal upload command. New firmware also accepts the old server's text weather pages; older firmware can read the new server's text fallback.
-
-
-In 0.8.1, the radar starts in **aircraft selection** mode. Press the knob to cycle to altitude or range mode as usual. Clockwise rotation now moves down the INFO menu. On weather views, tap the left side for the previous view or the right side for the next (wrapping at the ends); the centre returns to INFO. Rotation still changes weather pages.

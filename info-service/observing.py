@@ -132,6 +132,7 @@ def calculate(lat, lon, download):
                                    'Cloud '+(str(p['cloud'])+'%' if p['cloud'] is not None else 'unavailable'),
                                    'Above 10 deg / times approx. 15s', 'May be obscured by cloud or buildings'))
     if not passes: pages.append(insights.page('VISIBLE STATION PASSES','None predicted in next 24 hours','Requires fresh station orbit data','Geometric passes remain in Stations'))
+    for p in pages: p['item']=p['title'].split(' / LOOK UP')[0]
     out=insights.result(pages,'Skyfield / JPL / CelesTrak / Open-Meteo')
     out.update({'passes':passes,'moon_percent':round(float(moon)), 'darkness':darkness})
     return out

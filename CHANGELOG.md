@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0
+
+- Standardize navigation: clockwise rotation cycles items, outer ring segments highlight the current item, side arrows cycle pages, and centre taps/short presses return to radar. Retain aircraft page slides/swipes.
+- Replace the radar INFO button with a stationary two-second touch hold; five-second mechanical setup hold remains separate.
+- Move the always-visible filter beside ALT and add watchlist/light/large filters: ALL / WCH / HEL / MIL / LGT / LRG.
+- Expand Logbook into details/photo, captured route and static observed-track views with optional OpenStreetMap background; keep recording interesting aircraft only.
+- Store bounded encounter tracks and route snapshots, split distinct callsigns/receptions, preserve data gaps and migrate old sightings without inventing missing paths. Add matching web detail/map views.
+- Cache attributed photo thumbnails on disk for seven days (up to 256), with a manual clear button at /cache.
+
 ## 0.9.0
 
 - Add opt-in authenticated device API and Docker MQTT bridge with Home Assistant discovery, dynamic page/aircraft selectors, brightness, sleep/wake, pickup and aircraft status/list entities.

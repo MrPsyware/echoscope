@@ -19,6 +19,7 @@
 #include "feed_json.h"
 #include "feed_buffer.h"
 #include "button_debounce.h"
+#include "touch_hold.h"
 #include "photo_protocol.h"
 #include "photo_config.h"
 #include "radar_ui.h"
@@ -43,6 +44,7 @@ lv_color_t *photoPixels=nullptr,*mapPixels=nullptr;
 bool capsPhotos=false,capsMaps=false,capsSatellites=false,mapWanted=true;
 String familyFlight,familyCallsign,familyArrival;
 uint32_t nextRoute=0;
+uint32_t nextLog=0,nextLogMap=0,lastLogRequested=0;
 uint32_t nextInsight=0; int lastInsight=0; String lastRoute;
 bool capsWeather=false,capsFlights=false,capsAirports=false,capsStargazing=false,capsHighlights=false;
 uint32_t nextCapabilities=0,nextMap=0,nextStations=0;
@@ -114,7 +116,7 @@ void controls(lv_timer_t *) {
     remainder+=steps;
     if(std::abs(remainder)>=transitionsPerDetent) {
         const int previousBand=ui::model.altitudeFilter;
-        if(!ui::settings && !ui::pageAnimating) { if(ui::infoMenu || ui::infoView) ui::rotateInfo(remainder/transitionsPerDetent); else if(ui::satelliteView) ui::rotateStations(remainder/transitionsPerDetent); else ui::model.rotate(remainder/transitionsPerDetent,now); }
+        if(!ui::settings && !ui::pageAnimating) { if(ui::infoMenu || ui::infoView) ui::rotateInfo(remainder/transitionsPerDetent); else if(ui::satelliteView) ui::rotateStations(remainder/transitionsPerDetent); else ui::model.rotate((ui::model.details || ui::model.selectMode || ui::model.altitudeMode)?-remainder/transitionsPerDetent:remainder/transitionsPerDetent,now); }
         if(previousBand!=ui::model.altitudeFilter) ui::requestFeed=true;
         remainder%=transitionsPerDetent;
     }
@@ -137,7 +139,7 @@ void controls(lv_timer_t *) {
         else if(ui::settings) ui::settings=false;
         else if(ui::infoMenu || ui::infoView) ui::pressInfo();
         else if(ui::satelliteView) ui::satelliteView=false;
-        else if(ui::routePage) ui::swipeDetails(-1,now);
+        else if(ui::routePage) { ui::routePage=false; ui::model.details=false; }
         else ui::model.press(now);
         deviceLog.printf("[input] Click accepted; rotation=%s\n",ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
     }
@@ -154,19 +156,29 @@ void controls(lv_timer_t *) {
 }
 void touch(lv_event_t *event) {
     const auto code=lv_event_get_code(event); const uint32_t now=millis();
-    static bool wakeTouch=false,consumeTap=false;
+    static bool wakeTouch=false,consumeTap=false,longTouch=false;
+    static sky::TouchHold touchHold;
     static sky::DetailGesture gesture;
     lv_indev_t *device=lv_indev_get_act(); lv_point_t point{};
     if(device) lv_indev_get_point(device,&point);
     if(code==LV_EVENT_PRESSED) {
-        consumeTap=false; ui::setupOpeningTouch=false; wakeTouch=wakeForInput(now,true); ui::input.touchBegin(now);
+        consumeTap=false; longTouch=false; touchHold.begin(now); ui::setupOpeningTouch=false; wakeTouch=wakeForInput(now,true); ui::input.touchBegin(now);
         gesture.begin(point.x,point.y); return;
     }
-    if(code==LV_EVENT_PRESSING) { wakeForInput(now,true); gesture.move(point.x,point.y); return; }
+    if(code==LV_EVENT_PRESSING) {
+        wakeForInput(now,true); gesture.move(point.x,point.y);
+        if(touchHold.update(now,!wakeTouch && !gesture.moved && !ui::input.buttonHeld && !ui::settings && !ui::pageAnimating && ui::infoAvailable())) {
+            ui::openInfo(); longTouch=true; consumeTap=true; ui::notificationUntil=0;
+        }
+        return;
+    }
     if(code==LV_EVENT_RELEASED || code==LV_EVENT_PRESS_LOST) {
         wakeForInput(now,true); ui::input.touchEnd(now); gesture.move(point.x,point.y);
         consumeTap=consumeTap || gesture.moved;
-        if(code==LV_EVENT_RELEASED && !wakeTouch && !ui::setupOpeningTouch && gesture.direction()) ui::swipeDetails(gesture.direction(),now);
+        if(code==LV_EVENT_RELEASED && !wakeTouch && !longTouch && !ui::setupOpeningTouch && gesture.direction()) {
+            if(ui::infoView) { if(ui::infoView==5) ui::changeLogPage(gesture.direction()); else ui::changeInfoPage(gesture.direction()); }
+            else ui::swipeDetails(gesture.direction(),now);
+        }
         gesture.end(); return;
     }
     if(code!=LV_EVENT_SHORT_CLICKED) return;
@@ -546,7 +558,8 @@ void fetchPhoto() {
     char reg[16]{};
     lvgl_port_lock(-1);
     auto *selected=ui::model.selection();
-    if(ui::model.details && !ui::settings && selected) snprintf(reg,sizeof(reg),"%s",selected->registration);
+    if(ui::infoView==5 && ui::infoCount) snprintf(reg,sizeof(reg),"%s",ui::infoPages[ui::infoPage].registration);
+    else if(ui::model.details && !ui::settings && selected) snprintf(reg,sizeof(reg),"%s",selected->registration);
     lvgl_port_unlock();
     if(!reg[0]) return;
     for(char c:reg) { if(!c) break; if(!isalnum(static_cast<unsigned char>(c)) && c!='-') return; }
@@ -563,7 +576,7 @@ void fetchPhoto() {
         if(body.complete && sky::photoPacket(body.text.c_str(),body.text.length(),width,height)) {
             lvgl_port_lock(-1);
             auto *current=ui::model.selection();
-            if(!ui::asleep.load() && ui::model.details && current && !strcmp(current->registration,reg)) {
+            if(!ui::asleep.load() && ((ui::infoView==5 && ui::infoCount && !strcmp(ui::infoPages[ui::infoPage].registration,reg)) || (ui::model.details && current && !strcmp(current->registration,reg)))) {
                 lv_img_cache_invalidate_src(&ui::photoImage);
                 memcpy(photoPixels,body.text.c_str()+sky::photoHeaderSize,width*height*2);
                 // Wire pixels are RGB565 big-endian, matching LV_COLOR_16_SWAP=1.
@@ -686,11 +699,13 @@ void fetchInsight(int view) {
     const bool fresh=age>=-30 && age<=(view==2?60:1800);
     lvgl_port_lock(-1);
     if(ui::infoView==view) {
+        char previousItem[48]{}; uint32_t previousEntry=0; int previousSubpage=0;
+        if(ui::infoCount && ui::infoPage<int(ui::infoCount)) { snprintf(previousItem,sizeof(previousItem),"%s",ui::infoPages[ui::infoPage].item); previousEntry=ui::infoPages[ui::infoPage].entryId; for(int i=0;i<ui::infoPage;++i) if(ui::sameItem(i,ui::infoPage)) ++previousSubpage; }
         ui::infoCount=0;
         if(ok && fresh) for(JsonObjectConst p:doc["pages"].as<JsonArrayConst>()) {
             if(ui::infoCount>=9) break;
             auto &out=ui::infoPages[ui::infoCount++]; out={};
-            sky::copyText(out.title,p["title"]); unsigned n=0;
+            sky::copyText(out.title,p["title"]); sky::copyText(out.item,p["item"]); out.entryId=p["entry_id"] | uint32_t(0); sky::copyText(out.registration,p["registration"]); unsigned n=0;
             if(view==1 && p["layout"]=="weather") {
                 sky::copyText(out.subtitle,p["subtitle"]); sky::copyText(out.note,p["note"]);
                 for(JsonObjectConst c:p["cards"].as<JsonArrayConst>()) {
@@ -702,6 +717,9 @@ void fetchInsight(int view) {
             }
             for(JsonVariantConst line:p["lines"].as<JsonArrayConst>()) { if(n>=7) break; sky::copyText(out.lines[n++],line); }
         }
+        if(previousItem[0]) { int subpage=0,first=-1; for(unsigned i=0;i<ui::infoCount;++i) if(!strcmp(ui::infoPages[i].item,previousItem)) { if(first<0) first=i; if(subpage++==previousSubpage) { ui::infoPage=i; first=-1; break; } } if(first>=0) ui::infoPage=first; }
+        if(ui::infoPage>=int(ui::infoCount)) ui::infoPage=0;
+        if(view==5 && ui::infoCount && previousEntry!=ui::infoPages[ui::infoPage].entryId) ui::resetLog();
         if(ui::infoCount) { ui::infoReceived=millis()-uint32_t(std::max(int64_t(0),age))*1000; ui::infoGenerated=generated; sky::copyText(ui::infoSource,doc["source"]); nextInsight=millis()+(view==2?20000:view>=4?60000:900000); }
         else snprintf(ui::infoMessage,sizeof(ui::infoMessage),"Data unavailable / retrying");
     }
@@ -720,6 +738,46 @@ void fetchRoute(const String &call) {
     } else snprintf(page.lines[0],sizeof(page.lines[0]),"Route unavailable / retrying");
     lvgl_port_lock(-1); ui::routeInfo=page; snprintf(ui::routeCall,sizeof(ui::routeCall),"%s",call.c_str()); ui::routeReady=true; lvgl_port_unlock();
 }
+void fetchLogbook() {
+    lvgl_port_lock(-1); const uint32_t entry=ui::infoCount?ui::infoPages[ui::infoPage].entryId:0; const int page=ui::logPage; lvgl_port_unlock();
+    if(!entry) return;
+    if(entry!=lastLogRequested) { nextLog=0; lastLogRequested=entry; }
+    if(int32_t(millis()-nextLog)>=0) {
+        nextLog=millis()+5000;
+        JsonDocument doc;
+        if(infoJSON("/v1/logbook/"+String(entry),doc) && doc["id"]==entry) {
+            nextLog=millis()+30000;
+            lvgl_port_lock(-1);
+            if(ui::infoView==5 && ui::infoCount && ui::infoPages[ui::infoPage].entryId==entry) {
+                ui::logEntry=entry; ui::logReady=true; ui::logPointCount=0; ui::logMapReady=false; ui::logRoute={};
+                unsigned n=0; for(JsonVariantConst line:doc["pages"][0]["lines"].as<JsonArrayConst>()) { if(n>=7) break; sky::copyText(ui::logRoute.lines[n++],line); }
+                ui::logRange=doc["range"] | 100; if(ui::logRange!=5 && ui::logRange!=10 && ui::logRange!=25 && ui::logRange!=50 && ui::logRange!=100) ui::logRange=100;
+                for(JsonArrayConst point:doc["track"].as<JsonArrayConst>()) { if(ui::logPointCount>=192) break; const float east=sky::number(point[0]),north=sky::number(point[1]); if(!std::isfinite(east)||!std::isfinite(north)||fabs(east)>150||fabs(north)>150) continue; const unsigned i=ui::logPointCount++; ui::logPoints[i]={east,north}; ui::logGaps[i]=point[2] | true; }
+                nextLogMap=0;
+            }
+            lvgl_port_unlock();
+        }
+    }
+    if(page==2 && capsMaps && mapPixels && int32_t(millis()-nextLogMap)>=0) {
+        nextLogMap=millis()+10000;
+        NetworkClient client; HTTPClient http; http.setConnectTimeout(1500); http.setTimeout(4000); http.useHTTP10(true);
+        http.begin(client,photoBase+"/v1/logmap/"+String(entry)); const int code=http.GET();
+        if(code==200 && http.getSize()==int(sky::mapBytes)) {
+            auto body=readFeedBody(http,sky::mapBytes,5000);
+            if(body.complete && sky::validMap(body.text.c_str(),body.text.length())) {
+                lvgl_port_lock(-1);
+                if(ui::infoView==5 && ui::logEntry==entry) {
+                    lv_img_cache_invalidate_src(&ui::mapImage); lv_img_cache_invalidate_src(&ui::logMapImage);
+                    memcpy(mapPixels,body.text.c_str()+8,sky::mapBytes-8); ui::mapReady=false; requestedMapRange=-1;
+                    ui::logMapImage.header.cf=LV_IMG_CF_TRUE_COLOR; ui::logMapImage.header.w=420; ui::logMapImage.header.h=420;
+                    ui::logMapImage.data_size=sky::mapBytes-8; ui::logMapImage.data=reinterpret_cast<uint8_t*>(mapPixels); ui::logMapReady=true; nextLogMap=millis()+600000;
+                }
+                lvgl_port_unlock();
+            }
+        }
+        http.end();
+    }
+}
 void fetchInfo() {
     if(photoBase.isEmpty() || ui::asleep.load()) return;
     const uint32_t now=millis();
@@ -736,6 +794,7 @@ void fetchInfo() {
         if(needsInfo || lastInsight!=insight) { nextInsight=0; lastInsight=insight; }
         if(int32_t(now-nextInsight)>=0) { fetchInsight(insight); return; }
     } else lastInsight=0;
+    if(insight==5) { fetchLogbook(); fetchPhoto(); return; }
     if(routeTarget.length() && (routeTarget!=lastRoute || int32_t(now-nextRoute)>=0)) { fetchRoute(routeTarget); return; }
     if(skyView && capsSatellites && int32_t(now-nextStations)>=0) { fetchStations(); return; }
     if(radar && capsMaps && mapWanted) {
@@ -852,7 +911,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.9.0 / connected observing");
+    deviceLog.println("EchoScope 0.10.0 / unified navigation and logbook");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);

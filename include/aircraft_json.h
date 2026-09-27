@@ -30,7 +30,7 @@ inline bool parseAircraft(JsonDocument &doc,Snapshot &out,double lat,double lon,
             const char *rotors[]={"H47","R22","R44","R66","EC35","EC45","B407","B06","H60","S92","A139","AS50"};
             for(auto type:rotors) if(!std::strcmp(a.type,type)) a.kind=AircraftKind::Rotorcraft;
         }
-        if(!matches(a,filter)) continue; // Filter before the nearest-64 capacity limit.
+        if(!matches(a,filter,watches)) continue; // Filter before the nearest-64 capacity limit.
         a.position=project(alat,alon,lat,lon); a.positionAge=seen; a.received=now;
         a.altitude=number(o["alt_baro"]); if(!std::isfinite(a.altitude)) a.altitude=number(o["alt_geom"]);
         a.speed=number(o["gs"]); a.track=number(o["track"]); a.verticalRate=number(o["baro_rate"]);

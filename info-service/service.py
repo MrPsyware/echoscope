@@ -1,10 +1,12 @@
-"""EchoScope LAN photo adapter. No photographs are stored on disk."""
+"""EchoScope LAN information server with bounded, attributed thumbnail caching."""
 import html
 import os
 import extras
 import insights
 import observing
 import integration
+import photo_cache
+import secrets
 import io
 import json
 import re
@@ -18,13 +20,14 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError
 from PIL import Image
 
-USER_AGENT = 'EchoScope/0.9.0 (+https://github.com/MrPsyware/echoscope)'
+USER_AGENT = 'EchoScope/0.10.0 (+https://github.com/MrPsyware/echoscope)'
 REG = re.compile(r'[A-Z0-9][A-Z0-9-]{0,14}\Z')
 CACHE = OrderedDict()
 LOCK = threading.Lock()
 GATE = threading.BoundedSemaphore(2)
 SAT_QUERY_LOCK = threading.Lock()
 NEXT_LOOKUP = 0.0
+CACHE_TOKEN=secrets.token_hex(24)
 WIDTH, HEIGHT = 200, 150
 HEADER = struct.Struct('<4sHH128s256s')
 Image.MAX_IMAGE_PIXELS = 2_000_000
@@ -72,6 +75,11 @@ def photo(registration):
         if cached and cached[0] > time.monotonic():
             CACHE.move_to_end(registration)
             return cached[1:]
+        saved=photo_cache.read(registration)
+        if saved:
+            CACHE[registration]=(time.monotonic()+300,*saved)
+            while len(CACHE)>32: CACHE.popitem(last=False)
+            return saved
         # Serialize upstream lookups and allow at most one new lookup per second.
         time.sleep(max(0, NEXT_LOOKUP - time.monotonic()))
         NEXT_LOOKUP = time.monotonic() + 1
@@ -89,11 +97,20 @@ def photo(registration):
             if not isinstance(credit, str) or not credit.strip() or len(credit.encode('utf-8')) >= 128 or len(link.encode('utf-8')) >= 256:
                 raise ValueError('Photo attribution is missing or too long')
             result = (make_packet(download(url, 512000), credit, link), credit, link)
+        if result[0] is not None:
+            try: photo_cache.write(registration,result[0])
+            except OSError: print('Photo disk cache unavailable; serving uncached',flush=True)
         CACHE[registration] = (time.monotonic() + 300, *result)
         CACHE.move_to_end(registration)
         while len(CACHE) > 32:
             CACHE.popitem(last=False)
         return result
+
+def packet_png(packet,offset,width,height):
+    import numpy as np
+    rgb=np.frombuffer(packet[offset:],dtype='>u2').reshape(height,width)
+    pixels=np.stack([((rgb>>11)&31)*255//31,((rgb>>5)&63)*255//63,(rgb&31)*255//31],axis=-1).astype('uint8')
+    out=io.BytesIO(); Image.fromarray(pixels).save(out,format='PNG'); return out.getvalue()
 
 class Handler(BaseHTTPRequestHandler):
     def log_request(self, code='-', size='-'):
@@ -108,8 +125,24 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        if urlsplit(self.path).path!='/cache/clear': return self.reply(404,b'Not found','text/plain')
+        from urllib.parse import parse_qs
+        try: size=int(self.headers.get('Content-Length','0'))
+        except ValueError: return self.reply(400,b'Invalid request','text/plain')
+        if not 0<size<=256: return self.reply(400,b'Invalid request','text/plain')
+        try: token=parse_qs(self.rfile.read(size).decode()).get('token',[''])[0]
+        except UnicodeError: return self.reply(400,b'Invalid form','text/plain')
+        if not secrets.compare_digest(token,CACHE_TOKEN): return self.reply(403,b'Reload cache controls','text/plain')
+        with LOCK:
+            photo_cache.clear(); CACHE.clear()
+        return self.reply(200,b'Photo cache cleared. Photos will be downloaded again when viewed.','text/plain')
+
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path == '/cache':
+            body='<meta name="viewport" content="width=device-width"><h1>Photo cache</h1><p>Thumbnails are cached for one week, up to 256 photos. Clearing photos preserves maps, orbital data and your logbook.</p><form method="post" action="/cache/clear"><input type="hidden" name="token" value="'+CACHE_TOKEN+'"><button>Clear photo cache</button></form>'
+            return self.reply(200,body.encode(),'text/html; charset=utf-8')
         if path == '/health':
             body = {'service': 'echoscope-photos', 'name': 'EchoScope Info Server', 'protocol': 1,
                     'capabilities': {'photos': os.environ.get('ENABLE_PHOTOS', '1') == '1',
@@ -119,6 +152,25 @@ class Handler(BaseHTTPRequestHandler):
                                      'airports': insights.AIRPORTS and bool(insights.AIRPORT_INDEX)},
                     'map_credit': extras.MAP_CREDIT}
             return self.reply(200, json.dumps(body).encode(), 'application/json')
+        if path.startswith(('/v1/logbook/','/v1/logmap/','/sighting/','/sighting-map/')):
+            if integration.STORE is None: return self.reply(404,b'Logbook unavailable','text/plain')
+            if not GATE.acquire(blocking=False): return self.reply(503,b'Busy','text/plain')
+            try:
+                entry_id=int(path.rsplit('/',1)[-1]); row=integration.STORE.entry(entry_id)
+                if path.startswith('/v1/logbook/'):
+                    body=integration.STORE.detail(entry_id,download)
+                    return self.reply(200,json.dumps(body,allow_nan=False).encode(),'application/json')
+                if path.startswith(('/v1/logmap/','/sighting-map/')):
+                    if not extras.MAPS or row['lat'] is None: return self.reply(404,b'Map unavailable','text/plain')
+                    radius=integration.STORE.track_range(row)
+                    code,packet=extras.map_response(row['lat'],row['lon'],radius,download)
+                    if path.startswith('/v1/logmap/') or code!=200: return self.reply(code,packet,'application/octet-stream')
+                    return self.reply(200,packet_png(packet,8,420,420),'image/png')
+                body=integration.STORE.web_entry(entry_id,download,photo if os.environ.get('ENABLE_PHOTOS','1')=='1' else None)
+                return self.reply(200,body.encode(),'text/html; charset=utf-8')
+            except (ValueError,KeyError): return self.reply(404,b'Log entry unavailable','text/plain')
+            except (OSError,TypeError): return self.reply(502,b'Log entry temporarily unavailable','text/plain')
+            finally: GATE.release()
         if path == '/sightings':
             if integration.STORE is None: return self.reply(404,b'Configure device integration first','text/plain')
             from urllib.parse import parse_qs
@@ -178,9 +230,10 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 GATE.release()
         if path == '/':
-            return self.reply(200, b'<h1>EchoScope Info Server</h1><p>Photos, maps, station predictions, weather and flight information. Weather: <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0). Flights: <a href="https://adsb.fi/">adsb.fi</a> and <a href="https://www.adsbdb.com/">adsbdb</a>. Airports: <a href="https://ourairports.com/data/">OurAirports</a>. Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>. Orbits: CelesTrak / SGP4.</p><p><a href="/sightings">Spotting history</a>. Service ready. Set this server URL in EchoScope setup.</p><p>Photo credits and original links: /photo/REGISTRATION</p>', 'text/html; charset=utf-8')
+            return self.reply(200, b'<h1>EchoScope Info Server</h1><p>Photos, maps, station predictions, weather and flight information. Weather: <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0). Flights: <a href="https://adsb.fi/">adsb.fi</a> and <a href="https://www.adsbdb.com/">adsbdb</a>. Airports: <a href="https://ourairports.com/data/">OurAirports</a>. Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>. Orbits: CelesTrak / SGP4.</p><p><a href="/sightings">Spotting history</a> / <a href="/cache">Photo cache controls</a>. Service ready. Set this server URL in EchoScope setup.</p><p>Photo credits and original links: /photo/REGISTRATION</p>', 'text/html; charset=utf-8')
+        png=path.startswith("/image/")
         binary = path.startswith('/v1/photo/')
-        if not binary and not path.startswith('/photo/'):
+        if not binary and not png and not path.startswith('/photo/'):
             return self.reply(404, b'Not found', 'text/plain')
         if os.environ.get('ENABLE_PHOTOS', '1') != '1':
             return self.reply(404, b'Photos disabled', 'text/plain')
@@ -193,6 +246,9 @@ class Handler(BaseHTTPRequestHandler):
             packet, credit, link = photo(reg)
             if packet is None:
                 return self.reply(404, b'No photo available', 'text/plain')
+            if png:
+                _,w,h=struct.unpack_from('<4sHH',packet)
+                return self.reply(200,packet_png(packet,392,w,h),'image/png')
             if binary:
                 return self.reply(200, packet, 'application/x-echoscope-rgb565')
             page = f'<h1>{html.escape(reg)}</h1><p>Photo: &copy; {html.escape(credit)} / Planespotters.net</p><p><a href="{html.escape(link, quote=True)}">View original photo</a></p>'

@@ -1,13 +1,13 @@
 # Home Assistant, pickup and observing
 
-EchoScope 0.9.0 uses the Info Server as a bridge. The knob keeps its small local
+EchoScope uses the Info Server as a bridge. The knob keeps its small local
 HTTP control API; Docker does MQTT, astronomy, background flight lookups and
 SQLite history. One Info Server supports one knob. You do not need MQTT to use
 the spotting log or observing/pickup alerts.
 
 ## Setup
 
-1. Update the knob firmware and this Docker service to 0.9.0 or newer.
+1. Update the knob firmware and this Docker service to 0.10.0 or newer.
 2. Hold the knob for five seconds and open its setup page. Enable **authenticated
    LAN integration**, save, and copy the **Device API token**. Its IP should have
    a DHCP reservation. Keep the existing Info Server URL configured on the knob.
@@ -43,7 +43,7 @@ Topic prefix: `echoscope/<lowercase-MAC-without-colons>`.
 
 | Topic suffix | Payload |
 | --- | --- |
-| `set/page` | `radar`, `aircraft`, `route`, `information`, `stations`, `weather`, `family`, `airports`, `stargazing`, `highlights` (available pages only) |
+| `set/page` | `radar`, `aircraft`, `route`, `information`, `stations`, `weather`, `family`, `airports`, `stargazing`, `logbook` (available pages only; `highlights` remains an alias) |
 | `set/aircraft` | ICAO hex, e.g. `40756d`, or the exact dropdown option |
 | `set/brightness` | Integer `5`–`100` |
 | `set/screen` | `ON` or `OFF` |
@@ -110,17 +110,40 @@ Space Stations remains the geometric overhead view and can work independently.
 
 ## Spotting log
 
-With device integration connected, INFO gains **Today's highlights** (latest eight
-interesting aircraft). `/sightings` on the Info Server shows paged full history.
-Records include registration, callsign, type, reason, first/last seen and closest
-observed distance. Watchlist matches, military and helicopters are included from
-the received feed; demo/stale positions are excluded. Idle sleep stops local
-sighting collection. It cannot recover aircraft absent from the knob's feed.
+With device integration connected, Information gains **Logbook**. Rotate through
+the latest eight encounters; the ring highlights the selected entry. Side arrows
+cycle sighting details/photo, captured database route, and observed path on a static
+radar map. Photos never reserve a blank frame. The map uses a subdued OpenStreetMap
+background when available and otherwise keeps the grid and track. It is north-up,
+centred on the home location when the encounter was recorded, and sized to fit the
+saved track (up to 100 km). Start is green; last recorded position is orange.
 
-Data is stored in `/data/sightings.sqlite3` in the existing Docker named volume.
-Retention is 30 days and at most 10,000 aircraft/day records; days use UTC. It groups
-each aircraft's observations for the day, not individual takeoffs/landings. The
-history page is a read-only LAN page and escapes aircraft/provider strings.
+`/sightings` on the Info Server provides paged full history. Open an entry for the
+same photo, route and an SVG track map. `/cache` has a **Clear photo cache** button:
+it clears disk thumbnails and the memory cache, preserving maps, orbits and history.
+Photos are cached for seven days, up to 256 files (about 15 MB), with photographer
+credit and the original source link kept with every thumbnail.
+
+Only interesting aircraft (watchlist, military and helicopters) are recorded from
+the knob's received feed while awake. A different non-empty callsign, home location,
+UTC day or a gap of at least 15 minutes starts a new encounter. Missing transient
+callsigns do not split the flight. Tracks keep at most 192 sampled points, preserving
+the beginning by decimating long paths. Reception gaps over 60 seconds are not joined;
+a dot with no line is a single observation. These are observed paths, not filed
+flight plans. The route is an adsbdb snapshot with its lookup time, normally captured
+in the background or when an older entry is first opened; it may differ from the
+actual flight. A callsign can be reused. No unobserved path is reconstructed.
+
+Data stays in `/data/sightings.sqlite3` in the existing named volume, for 30 days
+and at most 10,000 encounters. Existing daily records migrate once, preserving their
+sighting details. They have no recoverable past path; the track page says so.
+
+New endpoints: `/v1/logbook/ID` (bounded route/track JSON), `/v1/logmap/ID` (same
+420×420 RGB565 map protocol), `/sighting/ID` (web detail), `/sighting-map/ID` (PNG),
+`/image/REGISTRATION` (thumbnail PNG). Historical maps render on demand and return
+202 while being built. The old `/v1/highlights` listing remains compatible and now
+includes entry IDs/registrations. Missing capabilities/data never invent a route,
+position or photo. The firmware's photo source link also works for logbook photos.
 
 ## Device HTTP API
 

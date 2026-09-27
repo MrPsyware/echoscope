@@ -228,6 +228,7 @@ def family(flight, callsign, arrival, download):
             route_info['lines'][-1]='Arrival differs from database route'
         pages.append(route_info)
         out = result(pages, 'adsb.fi / adsbdb / OurAirports')
+        for p in out['pages']: p['item']=flight
         out['tracking'] = tracking
         return out
     return cached(('family', flight, callsign, arrival), 20, build)
