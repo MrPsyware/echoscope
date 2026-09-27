@@ -17,15 +17,18 @@ inline bool infoOption(int option) {
 inline void rotateInfo(int delta) {
     if(infoView) { if(infoCount) infoPage=(infoPage+delta%int(infoCount)+int(infoCount))%int(infoCount); return; }
     if(!infoAvailable()) return;
-    int step=delta<0?-1:1;
+    int step=delta<0?1:-1; // Reverse only menu navigation; page rotation stays unchanged.
     for(int n=0;n<std::abs(delta);++n) for(int i=0;i<4;++i) {
         infoSelection=(infoSelection+step+4)%4;
         if(infoOption(infoSelection)) break;
     }
 }
+inline void ensureInfoSelection() {
+    if(infoOption(infoSelection)) return;
+    for(int i=0;i<4;++i) if(infoOption(i)) { infoSelection=i; return; }
+}
 inline void openInfo() {
-    infoMenu=true; infoSelection=0;
-    if(!infoOption(infoSelection)) rotateInfo(1);
+    infoMenu=true; infoSelection=0; ensureInfoSelection();
 }
 inline void pressInfo() {
     if(infoView) { infoView=0; infoMenu=true; return; }
@@ -58,6 +61,10 @@ inline void renderInfo(uint32_t now) {
     } else {
         if(infoPage>=int(infoCount)) infoPage=0;
         const auto &p=infoPages[infoPage];
+        if(infoView==1 && infoCount>1) {
+            text(222,"<",&lv_font_montserrat_22,muted,28,32);
+            text(222,">",&lv_font_montserrat_22,muted,406,32);
+        }
         if(p.cardCount) { renderWeather(p); return; }
         lv_point_t bounds;
         lv_txt_get_size(&bounds,p.title,&lv_font_montserrat_22,0,0,320,LV_TEXT_FLAG_NONE);
@@ -77,8 +84,14 @@ inline void renderInfo(uint32_t now) {
     }
     text(427,"Turn pages / press back",&lv_font_montserrat_12,muted);
 }
-inline void tapInfo(int y) {
-    if(infoView) { pressInfo(); return; }
+inline void tapInfo(int x,int y) {
+    if(infoView) {
+        if(infoView==1 && y>=90 && y<=380 && (x<=115 || x>=351)) {
+            if(infoCount) rotateInfo(x<=115?-1:1);
+            return;
+        }
+        pressInfo(); return;
+    }
     if(y>=365) { infoMenu=false; return; }
     int row=0;
     for(int i=0;i<4;++i) if(infoOption(i)) {

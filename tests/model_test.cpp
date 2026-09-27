@@ -15,8 +15,8 @@ int main() {
     gesture.begin(200,200); gesture.move(208,206); assert(!gesture.direction() && !gesture.moved);
     gesture.begin(200,200); gesture.move(180,290); assert(!gesture.direction() && gesture.moved);
     gesture.begin(200,200); gesture.move(230,200); assert(!gesture.direction() && gesture.moved);
-    Model startup; startup.defaultRangeIndex=4; startup.reset(); assert(startup.range()==100);
-    startup.rotate(-2,0); assert(startup.range()==25); startup.reset(); assert(startup.range()==100);
+    Model startup; assert(startup.selectMode && !startup.altitudeMode); startup.defaultRangeIndex=4; startup.reset(); assert(startup.range()==100);
+    assert(startup.selectMode); startup.selectMode=false; startup.rotate(-2,0); assert(startup.range()==25); startup.reset(); assert(startup.range()==100 && startup.selectMode);
     AlertStyle style;
     assert(style.brightness==30 && style.width==3 && style.periodSeconds==4);
     assert(style.opacity(0)<style.opacity(1000) && style.opacity(1000)<style.opacity(2000));
@@ -61,7 +61,7 @@ int main() {
     assert(list.set("") && !list.matches("A388",true));
     assert(altitudeBand(-100)==1 && altitudeBand(4999)==1 && altitudeBand(5000)==2);
     assert(altitudeBand(15000)==3 && altitudeBand(30000)==4 && altitudeBand(NAN)==5);
-    Model bands; bands.press(0); assert(bands.selectMode);
+    Model bands; assert(bands.selectMode);
     bands.press(0); assert(bands.altitudeMode && !bands.selectMode);
     bands.rotate(-1,0); assert(bands.altitudeFilter==5 && bands.range()==25);
     Aircraft unknown; assert(bands.visible(unknown,0)); unknown.altitude=1000; assert(!bands.visible(unknown,0));
@@ -79,7 +79,7 @@ int main() {
     auto n=project(51.6,0,51.5,0); assert(n.north>11 && n.north<11.2 && std::abs(n.east)<0.01);
     auto e=project(51.5,0.1,51.5,0); assert(e.east>6.9 && e.east<7 && std::abs(e.north)<0.01);
     auto wrap=project(0,-179.9,0,179.9); assert(wrap.east>22 && wrap.east<22.3);
-    Model m; std::array<Trail,maxAircraft> trails; m.trails=trails.data();
+    Model m; m.selectMode=false; std::array<Trail,maxAircraft> trails; m.trails=trails.data();
     m.rotate(-100,0); assert(m.range()==5); m.rotate(100,0); assert(m.range()==100);
     Snapshot s; s.count=3;
     for(size_t i=0;i<s.count;++i) { snprintf(s.aircraft[i].hex,12,"abc00%u",unsigned(i)); s.aircraft[i].position={float(i+1),0}; }
@@ -110,7 +110,7 @@ int main() {
     assert(straight.count==2 && straight.points[0].east==0);
     Point a={-20,0},b={20,0}; assert(clipToCircle(a,b,10) && a.east==-10 && b.east==10);
     a={20,20}; b={30,30}; assert(!clipToCircle(a,b,10));
-    m.reset(); assert(m.trails==trails.data() && !m.selectMode && !m.data.count);
+    m.reset(); assert(m.trails==trails.data() && m.selectMode && !m.data.count);
     assert(!setupExpired(1000,1001)); // stale loop timestamp before portal opened
     assert(!setupExpired(1001,1001));
     assert(!setupExpired(301000,1001));

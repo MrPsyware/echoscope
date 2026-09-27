@@ -596,7 +596,7 @@ void discoverInfo() {
     ui::mapsEnabled=capsMaps;
     ui::satellitesEnabled=capsSatellites;
     if(!ui::infoAvailable()) ui::infoMenu=false;
-    if(ui::infoMenu && !ui::infoOption(ui::infoSelection)) ui::rotateInfo(1);
+    if(ui::infoMenu) ui::ensureInfoSelection();
     if(!capsPhotos) { ui::photoReady=false; photoAttempt[0]=0; }
     if(!capsMaps) { ui::mapReady=false; requestedMapRange=-1; }
     if(!capsSatellites) { ui::satelliteView=false; ui::stationCount=0; }
@@ -827,7 +827,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.8.0 / swipeable aircraft routes and weather cards");
+    deviceLog.println("EchoScope 0.8.1 / touch navigation refinements");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);

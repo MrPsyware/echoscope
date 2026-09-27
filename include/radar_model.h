@@ -102,7 +102,7 @@ struct Model {
     char selected[12]{};
     int rangeIndex = 2, defaultRangeIndex=2;
     Filter filter=Filter::All;
-    bool selectMode = false, altitudeMode=false;
+    bool selectMode = true, altitudeMode=false;
     int altitudeFilter=0;
     Watches watches;
     bool details = false;
@@ -111,7 +111,7 @@ struct Model {
     uint32_t lastUpdate = 0;
     float range() const { return ranges[rangeIndex]; }
     void reset() {
-        data.count=0; selected[0]=0; rangeIndex=defaultRangeIndex; filter=Filter::All; selectMode=false; altitudeMode=false; altitudeFilter=0;
+        data.count=0; selected[0]=0; rangeIndex=defaultRangeIndex; filter=Filter::All; selectMode=true; altitudeMode=false; altitudeFilter=0;
         details=false; demo=true; hasUpdate=false; lastUpdate=0;
         if(trails) for(size_t i=0;i<maxAircraft;++i) trails[i].clear();
     }

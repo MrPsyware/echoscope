@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1
+
+- Start in aircraft-selection mode, including after saving setup.
+- Return to the radar when tapping the centre of either aircraft details or its route page.
+- Enlarge the arc touch targets to cover the arc ends and a wider inner band; swipes remain available.
+- Reverse INFO menu rotation while keeping page rotation unchanged and selecting the first available item on entry.
+- Add previous/next weather side taps with visible arrows and wraparound; centre taps still return to INFO.
+
 ## 0.8.0
 
 - Move selected aircraft routes from INFO into a second aircraft-details page: swipe left for route, right for details, with quarter-circle rim markers.

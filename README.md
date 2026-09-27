@@ -255,10 +255,13 @@ Sources: [adsb.fi](https://github.com/adsbfi/opendata), [adsbdb](https://www.ads
 
 ### Swipeable aircraft details (0.8.0)
 
-Open an aircraft as usual. When the information server offers flight routes and the aircraft has a callsign, a thin green quarter-circle appears on the right rim. **Swipe left** to slide to that aircraft's route page. **Swipe right** to return to its photo/telemetry details. You can also tap the rim marker; pressing the knob on the route page returns to details. A normal tap/press on the first details page keeps its existing return-to-radar behaviour. Turn the knob to change aircraft; the page resets to details for the new selection.
+Open an aircraft as usual. When the information server offers flight routes and the aircraft has a callsign, a thin green quarter-circle appears on the right rim. **Swipe left** to slide to that aircraft's route page. **Swipe right** to return to its photo/telemetry details. You can also tap the rim marker; pressing the knob on the route page returns to details. A centre tap on either aircraft page returns directly to radar. A bare press on the route page returns to the first details page. The arc touch band extends inward and covers the arc ends. Turn the knob to change aircraft; the page resets to details for the new selection.
 
 The route page shows the database origin/destination and airline when known. This is not a filed flight plan with waypoints, nor confirmed operational routing or ETA. An unavailable route shows a retry status instead of another aircraft's route. Routes are prefetched while viewing details, and a route you opened stays tied to its callsign even if that aircraft leaves radar coverage.
 
 The 380 ms eased transition moves cached LVGL images rather than redrawing text on every animation frame. Two optional 466x466 RGB565 snapshots use 868,624 bytes of PSRAM (about 0.83 MiB). If allocation fails, swipes still change pages immediately. Animation responsiveness depends on the physical display; native previews cannot measure hardware frame rate.
 
 Update both parts for the new weather cards: `git pull && make docker` on the server, then pull the firmware checkout and use your normal upload command. New firmware also accepts the old server's text weather pages; older firmware can read the new server's text fallback.
+
+
+In 0.8.1, the radar starts in **aircraft selection** mode. Press the knob to cycle to altitude or range mode as usual. Clockwise rotation now moves down the INFO menu. On weather views, tap the left side for the previous view or the right side for the next (wrapping at the ends); the centre returns to INFO. Rotation still changes weather pages.

@@ -142,3 +142,9 @@ A native LVGL harness exercised forward/reverse transitions, animation completio
 The Docker image built and ran with read-only root, an unprivileged user and its 256 MiB limit. Live `/health`, `/v1/weather` and `/v1/route` requests returned HTTP 200; the new weather payload was 1,663 bytes and had exactly three views with three daily cards in the final view. Text fallback lines remain present for older firmware. The test container was removed. Existing Docker binding, server URL configuration and firmware partitions are unchanged. No hardware upload was performed.
 
 Final firmware/package build passed: 1,724,292 application bytes and 93,164 static RAM bytes. Compared with 0.7.0 this adds 16,180 application bytes and 6,152 static RAM bytes, plus the optional PSRAM snapshots noted above. The application occupies 26.3% of its unchanged OTA slot.
+
+## Version 0.8.1 — control refinements
+
+Host tests and the firmware/package build passed. Model assertions cover aircraft-selection defaults on construction and reset, saved startup range, and the existing mode cycle. A native LVGL navigation harness verified centre taps returning directly to radar from both aircraft pages, enlarged arc targets at the inner band and curved endpoint, animated page switching, reversed INFO menu steps, skipping unavailable items and selecting the first visible item on menu entry. Weather side taps were checked in both directions, including wraparound, with centre-to-INFO behaviour and unrelated information pages preserved. A 466x466 weather preview with the new side arrows and touch hint was inspected.
+
+Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a firmware-only update; the information server is unchanged. Physical knob direction and touch feel still require device confirmation. No hardware upload was performed.

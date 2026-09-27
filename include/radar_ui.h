@@ -328,15 +328,19 @@ inline void render(uint32_t now) {
     if(!visible) text(310,stale?"Waiting for fresh positions":model.filter==sky::Filter::All?"No aircraft in this range":"No matching aircraft in range",&lv_font_montserrat_16,muted);
     if(stale) text(365,status,&lv_font_montserrat_14,amber);
 }
+inline bool routeEdgeHit(int x,int y,bool left) {
+    const int dx=x-centre,dy=y-centre;
+    // A broad band around the visible quarter arc, including its ends.
+    return (left?dx<0:dx>0) && dx*dx+dy*dy>=175*175 && std::abs(dy)*10<=std::abs(dx)*13;
+}
 inline void tap(int x,int y,uint32_t now) {
     if(pageAnimating) return;
     if(settings) { settings=false; return; }
-    if(infoMenu || infoView) { tapInfo(y); return; }
+    if(infoMenu || infoView) { tapInfo(x,y); return; }
     if(satelliteView) { satelliteView=false; return; }
     if(model.details) {
-        if(routeAvailable() && ((!routePage && x>420) || (routePage && x<46)) && y>=73 && y<=393) { swipeDetails(routePage?-1:1,now); return; }
-        if(routePage) { swipeDetails(-1,now); return; }
-        model.details=false; model.refresh(now); return;
+        if(routeAvailable() && routeEdgeHit(x,y,routePage)) { swipeDetails(routePage?-1:1,now); return; }
+        routePage=false; model.details=false; model.refresh(now); return;
     }
     if(infoAvailable() && y>=70 && y<=108 && x>=305 && x<=395) { openInfo(); return; }
     if(y>=20 && y<67 && x>=128 && x<=338) { if(activity.tapFilter(now)) { model.cycleFilter(now); requestFeed=true; } return; }

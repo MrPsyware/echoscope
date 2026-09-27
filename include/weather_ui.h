@@ -43,6 +43,6 @@ inline void renderWeather(const InfoPage &p) {
     }
     text(365,p.note,&lv_font_montserrat_14,green,63,340);
     text(395,"Open-Meteo / CC BY 4.0",&lv_font_montserrat_14,muted);
-    char nav[64]; snprintf(nav,sizeof(nav),"%d / %u   Turn to change view",infoPage+1,infoCount);
+    char nav[64]; snprintf(nav,sizeof(nav),"%d / %u   Tap sides / turn",infoPage+1,infoCount);
     text(417,nav,&lv_font_montserrat_14,muted);
 }
