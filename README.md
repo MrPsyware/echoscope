@@ -1,5 +1,12 @@
 # EchoScope
 
+**New in 0.9.0:** Home Assistant/MQTT controls, family pickup alerts, a persistent
+spotting log, stargazing outlook and visible station countdown alerts.
+See [integration setup and controls](info-service/INTEGRATION.md). Update both the
+firmware and Docker service; enable LAN integration on the knob and configure the
+server's `.env` for background alerts/history and MQTT.
+
+
 *A miniature radar station for the aircraft overhead.*
 
 ![Radar modes and highlighted aircraft trails](docs/radar-preview.png)

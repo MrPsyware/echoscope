@@ -9,6 +9,14 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     environment:
+      ECHOSCOPE_URL: ${ECHOSCOPE_URL:-}
+      ECHOSCOPE_TOKEN: ${ECHOSCOPE_TOKEN:-}
+      MQTT_HOST: ${MQTT_HOST:-}
+      MQTT_PORT: ${MQTT_PORT:-1883}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_TLS: ${MQTT_TLS:-0}
+      ENABLE_STARGAZING: ${ENABLE_STARGAZING:-1}
       ENABLE_WEATHER: ${ENABLE_WEATHER:-1}
       ENABLE_FLIGHTS: ${ENABLE_FLIGHTS:-1}
       ENABLE_AIRPORTS: ${ENABLE_AIRPORTS:-1}

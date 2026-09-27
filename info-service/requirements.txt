@@ -1,2 +1,3 @@
 Pillow==12.1.1
 skyfield==1.54
+paho-mqtt==2.1.0

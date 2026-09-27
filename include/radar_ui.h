@@ -189,6 +189,18 @@ inline void render(uint32_t now) {
         text(370,"Press or tap to return",&lv_font_montserrat_16,muted);
         return;
     }
+    if(notificationUntil && int32_t(notificationUntil-now)>0) {
+        circle(centre,centre,222,green,3);
+        text(105,"ECHOSCOPE ALERT",&lv_font_montserrat_22,green);
+        text(174,notification,&lv_font_montserrat_20,white,73,320);
+        if(notificationCountdown) {
+            const int seconds=std::max<int32_t>(0,int32_t(notificationCountdown-now)/1000);
+            char countdown[40]; snprintf(countdown,sizeof(countdown),seconds?"Visible in %d:%02d":"Look up now",seconds/60,seconds%60);
+            text(300,countdown,&lv_font_montserrat_22,green);
+        }
+        text(355,"Tap or press to dismiss",&lv_font_montserrat_14,muted); return;
+    }
+    notificationUntil=0;
     if(infoMenu || infoView) { renderInfo(now); return; }
     if(satelliteView && satellitesEnabled) { renderStations(now); return; }
     const bool stale=!model.demo && (!model.hasUpdate || uint32_t(now-model.lastUpdate)>20000);
@@ -335,6 +347,7 @@ inline bool routeEdgeHit(int x,int y,bool left) {
 }
 inline void tap(int x,int y,uint32_t now) {
     if(pageAnimating) return;
+    if(notificationUntil) { notificationUntil=0; return; }
     if(settings) { settings=false; return; }
     if(infoMenu || infoView) { tapInfo(x,y); return; }
     if(satelliteView) { satelliteView=false; return; }

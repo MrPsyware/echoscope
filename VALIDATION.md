@@ -148,3 +148,29 @@ Final firmware/package build passed: 1,724,292 application bytes and 93,164 stat
 Host tests and the firmware/package build passed. Model assertions cover aircraft-selection defaults on construction and reset, saved startup range, and the existing mode cycle. A native LVGL navigation harness verified centre taps returning directly to radar from both aircraft pages, enlarged arc targets at the inner band and curved endpoint, animated page switching, reversed INFO menu steps, skipping unavailable items and selecting the first visible item on menu entry. Weather side taps were checked in both directions, including wraparound, with centre-to-INFO behaviour and unrelated information pages preserved. A 466x466 weather preview with the new side arrows and touch hint was inspected.
 
 Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a firmware-only update; the information server is unchanged. Physical knob direction and touch feel still require device confirmation. No hardware upload was performed.
+
+## Version 0.9.0 — connected observing
+
+- Firmware model/JSON/photo/network host checks and ESP32-S3 release build passed.
+  Application 1,739,348 bytes (26.5% of the 6,553,600-byte OTA slot), static RAM
+  93,348 bytes (28.5%). Runtime allocations are additional.
+- 28 Python tests passed: existing photo/map/orbit/weather/flight tests plus
+  command validation, discovery/state, durable deduplication, stale pickup rejection,
+  bounded sighting retention, HTML escaping, station visibility conditions and
+  cloud forecast validation/cache behavior.
+- Isolated Mosquitto 2 broker + authenticated simulated-knob HTTP endpoint:
+  automatic discovery, dynamic status, brightness, page, aircraft, sleep/wake,
+  retained-command rejection, Home Assistant birth rediscovery and device-offline
+  availability passed. This is not a test against the physical ESP32 or user's HA.
+- Docker built and ran with read-only root, dropped capabilities and 256 MiB limit.
+  Live JPL ephemeris, CelesTrak station prediction and Open-Meteo cloud requests
+  returned a bounded valid stargazing packet with darkness, Moon and an ISS pass.
+  Container used about 85 MiB after the request; no OOM recorded. This is an observed
+  smoke-test value, not a maximum for every configuration.
+- Native LVGL build rendered and visually checked the six-entry INFO menu,
+  stargazing text layout and live countdown alert. Menu wrap, page side taps and
+  alert dismissal assertions passed.
+- Firmware, Docker image and setup documentation prepared together. No flash or
+  change to the user's MQTT/Home Assistant installation was performed. Remaining
+  on-device check: token-enabled control responses, overnight alert timing, actual
+  feed/HTTP latency and sleep/wake interaction on the knob.

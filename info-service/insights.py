@@ -207,9 +207,11 @@ def family(flight, callsign, arrival, download):
                  and all(isinstance(a.get(k), (int, float)) and math.isfinite(a[k]) for k in ('lat', 'lon'))
                  and abs(a['lat']) <= 90 and abs(a['lon']) <= 180]
         pages = []
+        tracking = {"fresh": False, "callsign": lookup, "arrival": arrival}
         if len(fresh) == 1:
             a = fresh[0]
             destination = next((x for x in AIRPORT_INDEX if arrival in (x['iata'], x['icao'])), None) if arrival else None
+            tracking.update({'fresh': True, 'hex': clean(a.get('hex')), 'registration': clean(a.get('r')), 'type': clean(a.get('t')), 'position_time': feed_time/1000-a['seen_pos'], 'distance_km': distance(a['lat'], a['lon'], destination['lat'], destination['lon']) if destination else None})
             proximity = ('To ' + arrival + ': ' + number(distance(a['lat'], a['lon'], destination['lat'], destination['lon']), ' km')) if destination else ('Arrival airport: ' + arrival if arrival else 'Set arrival airport in setup')
             pages.append(page(flight + ' / ' + lookup, clean(a.get('r')) + ' / ' + clean(a.get('t')),
                               f"{a['lat']:.3f}, {a['lon']:.3f}",
@@ -225,7 +227,9 @@ def family(flight, callsign, arrival, download):
         if arrival and destination and arrival not in (destination.get('iata_code'), destination.get('icao_code')):
             route_info['lines'][-1]='Arrival differs from database route'
         pages.append(route_info)
-        return result(pages, 'adsb.fi / adsbdb / OurAirports')
+        out = result(pages, 'adsb.fi / adsbdb / OurAirports')
+        out['tracking'] = tracking
+        return out
     return cached(('family', flight, callsign, arrival), 20, build)
 
 

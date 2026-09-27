@@ -1,5 +1,8 @@
 # EchoScope Info Server
 
+For MQTT/Home Assistant, pickup alerts, stargazing and the spotting log, see [Integration setup](INTEGRATION.md).
+
+
 Optional LAN companion for aircraft photos, a faint street-map radar background, and space-station predictions. The knob continues to work with aircraft data alone if this server is absent. No provider account or API key is needed for the default sources.
 
 ## Start or upgrade

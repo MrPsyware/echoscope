@@ -33,6 +33,7 @@ DNSServer dns;
 esp_panel::board::Board *board;
 String ssid,password,csrf,photoBase;
 String watchTypes,watchRegs,watchCalls;
+String apiToken; bool integrationEnabled=false,satelliteAlerts=false; unsigned pickupKm=100;
 unsigned brightness=100,sleepMinutes=60,startRange=2;
 bool watchMilitary=false,watchRotor=false;
 sky::AlertStyle savedAlertStyle;
@@ -43,7 +44,7 @@ bool capsPhotos=false,capsMaps=false,capsSatellites=false,mapWanted=true;
 String familyFlight,familyCallsign,familyArrival;
 uint32_t nextRoute=0;
 uint32_t nextInsight=0; int lastInsight=0; String lastRoute;
-bool capsWeather=false,capsFlights=false,capsAirports=false;
+bool capsWeather=false,capsFlights=false,capsAirports=false,capsStargazing=false,capsHighlights=false;
 uint32_t nextCapabilities=0,nextMap=0,nextStations=0;
 int requestedMapRange=-1;
 
@@ -132,14 +133,17 @@ void controls(lv_timer_t *) {
         } else if(event.kind==sky::ButtonDebounce::Hold && !wakeButton) requestPortal=true;
     }
     if(ui::input.takeClick(millis()) && !ui::pageAnimating) {
-        if(ui::settings) ui::settings=false;
+        if(ui::notificationUntil) ui::notificationUntil=0;
+        else if(ui::settings) ui::settings=false;
         else if(ui::infoMenu || ui::infoView) ui::pressInfo();
         else if(ui::satelliteView) ui::satelliteView=false;
         else if(ui::routePage) ui::swipeDetails(-1,now);
         else ui::model.press(now);
         deviceLog.printf("[input] Click accepted; rotation=%s\n",ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
     }
-    if(ui::activity.tick(millis(),ui::input.touching || ui::input.buttonHeld || wakeButton)) {
+    if(ui::pickupArmed && uint32_t(now-ui::pickupStarted)>=86400000u) ui::pickupArmed=false;
+    const bool showingAlert=ui::notificationUntil && int32_t(ui::notificationUntil-now)>0;
+    if(ui::activity.tick(millis(),ui::input.touching || ui::input.buttonHeld || wakeButton || ui::pickupArmed || showingAlert)) {
         ui::asleep=true;
         if(!board->getLCD()->setDisplayOnOff(false)) {
             lv_canvas_fill_bg(ui::canvas,lv_color_black(),LV_OPA_COVER);
@@ -360,6 +364,12 @@ void setupPage() {
         page+="<label>Arrival airport IATA / ICAO (optional)</label><input name='family_arrival' maxlength='10' placeholder='LGW' value='"+escape(familyArrival)+"'>";
     }
     if(capsMaps) page+="<input type='hidden' name='map_setting' value='1'><label><input style='width:auto' type='checkbox' name='map_enabled' "+String(mapWanted?"checked":"")+"> Faint map background</label>";
+    page+="<h2>Home Assistant / observing</h2><input type='hidden' name='integration_setting' value='1'>";
+    page+="<label><input style='width:auto' type='checkbox' name='integration_enabled' "+String(integrationEnabled?"checked":"")+"> Enable authenticated LAN integration</label>";
+    page+="<p>Use this device URL and token in the Docker server configuration. Keep the token private; it grants display controls and access to aircraft/location data.</p><label>Device API token</label><input readonly value='"+escape(apiToken)+"'>";
+    page+="<label><input style='width:auto' type='checkbox' name='satellite_alerts' "+String(satelliteAlerts?"checked":"")+"> Alert / wake for visible station passes (2 minutes ahead)</label>";
+    page+="<label>Pickup alert distance from arrival airport (km)</label><input name='pickup_km' type='number' min='5' max='1000' value='"+String(pickupKm)+"'>";
+    page+="<label><input style='width:auto' type='checkbox' name='pickup_arm'> Arm family pickup for this session (up to 24 hours)</label><p>Pickup keeps the screen awake. Reboot or explicit sleep disarms it. Requires configured flight, arrival airport and Docker device integration.</p>";
     page+="<button>Save and start radar</button></form><p>Live aircraft data: adsb.fi. Hold the knob to reopen setup. Settings stay on this device.</p>";
     server.sendHeader("Cache-Control","no-store"); server.send(200,"text/html",page);
 }
@@ -394,6 +404,10 @@ void saveSetup() {
         auto valid=[](String &s) { s.trim(); s.toUpperCase(); if(s.length() && (s.length()<2 || s.length()>10)) return false; for(unsigned i=0;i<s.length();++i) if(!((s[i]>='A' && s[i]<='Z') || (s[i]>='0' && s[i]<='9'))) return false; return true; };
         if(!valid(newFamily) || !valid(newCallsign) || !valid(newArrival)) { server.send(400,"text/plain","Flight and airport fields need 2-10 letters or digits, or leave blank."); return; }
     }
+    double newPickup=pickupKm;
+    if(server.hasArg("integration_setting") && (!coordinate(server.arg("pickup_km"),5,1000,newPickup) || floor(newPickup)!=newPickup || (server.hasArg("pickup_arm") && (newFamily.isEmpty() || newArrival.isEmpty() || !server.hasArg("integration_enabled"))))) {
+        server.send(400,"text/plain","Pickup needs 5-1000 km, a flight, arrival airport and enabled integration"); return;
+    }
     sky::AlertStyle newAlert;
     double ringBrightness,ringWidth,ringPeriod,ringEffect;
     if(!sky::parseAlertColor(server.arg("alert_watch").c_str(),newAlert.watch) ||
@@ -407,11 +421,16 @@ void saveSetup() {
     }
     newAlert.brightness=unsigned(ringBrightness); newAlert.width=unsigned(ringWidth);
     newAlert.periodSeconds=unsigned(ringPeriod); newAlert.effect=sky::AlertEffect(unsigned(ringEffect));
+    if(server.hasArg("integration_setting")) {
+        integrationEnabled=server.hasArg("integration_enabled"); satelliteAlerts=server.hasArg("satellite_alerts"); pickupKm=unsigned(newPickup);
+        prefs.putBool("integration",integrationEnabled); prefs.putBool("sat_alerts",satelliteAlerts); prefs.putUInt("pickup_km",pickupKm);
+        lvgl_port_lock(-1); ui::pickupArmed=server.hasArg("pickup_arm"); ui::pickupStarted=millis(); lvgl_port_unlock();
+    }
     familyFlight=newFamily; familyCallsign=newCallsign; familyArrival=newArrival;
     prefs.putString("family_flight",familyFlight); prefs.putString("family_call",familyCallsign); prefs.putString("family_arr",familyArrival);
     nextInsight=0; lastInsight=0; lastRoute="";
-    lvgl_port_lock(-1); snprintf(ui::familyNumber,sizeof(ui::familyNumber),"%s",familyFlight.c_str()); ui::infoMenu=false; ui::infoView=0; ui::infoCount=0; ui::weatherEnabled=ui::flightsEnabled=ui::airportsEnabled=false; lvgl_port_unlock();
-    capsWeather=capsFlights=capsAirports=false;
+    lvgl_port_lock(-1); snprintf(ui::familyNumber,sizeof(ui::familyNumber),"%s",familyFlight.c_str()); ui::infoMenu=false; ui::infoView=0; ui::infoCount=0; ui::weatherEnabled=ui::flightsEnabled=ui::airportsEnabled=ui::stargazingEnabled=ui::highlightsEnabled=false; lvgl_port_unlock();
+    capsWeather=capsFlights=capsAirports=capsStargazing=capsHighlights=false;
     savedAlertStyle=newAlert;
     prefs.putUInt("alert_watch",newAlert.watch); prefs.putUInt("alert_heli",newAlert.helicopter); prefs.putUInt("alert_mil",newAlert.military);
     prefs.putUInt("alert_bright",newAlert.brightness); prefs.putUInt("alert_width",newAlert.width);
@@ -440,7 +459,7 @@ void saveSetup() {
     prefs.putString("ssid",ssid); prefs.putString("pass",password); prefs.putDouble("lat",lat); prefs.putDouble("lon",lon); prefs.putBool("set",true);
     server.send(200,"text/html","<meta name='viewport' content='width=device-width'><h1>Settings saved</h1><p>The knob is connecting. If it cannot connect, setup remains available. Press the knob to view the radar.</p>");
     WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=millis()+20000; nextFetch=millis(); retryDelay=5000;
-    lvgl_port_lock(-1); ui::model.reset(); ui::model.demo=false; ui::settings=false; lvgl_port_unlock();
+    lvgl_port_lock(-1); ui::model.reset(); ui::model.demo=false; ui::settings=false; if(ui::pickupArmed) { ui::infoView=2; ui::infoNeedsFetch=true; } lvgl_port_unlock();
     status("Connecting to Wi-Fi");
 }
 void updateSetupNetwork() {
@@ -589,9 +608,12 @@ void discoverInfo() {
     capsWeather=ok && doc["capabilities"]["weather"]==true;
     capsFlights=ok && doc["capabilities"]["flights"]==true;
     capsAirports=ok && doc["capabilities"]["airports"]==true;
+    capsStargazing=ok && doc["capabilities"]["stargazing"]==true;
+    capsHighlights=ok && doc["capabilities"]["highlights"]==true;
     lvgl_port_lock(-1);
+    ui::stargazingEnabled=capsStargazing; ui::highlightsEnabled=capsHighlights;
     ui::weatherEnabled=capsWeather; ui::flightsEnabled=capsFlights; ui::airportsEnabled=capsAirports;
-    if((ui::infoView==1 && !capsWeather) || (ui::infoView==2 && !capsFlights) || (ui::infoView==3 && !capsAirports)) { ui::infoView=0; ui::infoCount=0; }
+    if((ui::infoView==1 && !capsWeather) || (ui::infoView==2 && !capsFlights) || (ui::infoView==3 && !capsAirports) || (ui::infoView==4 && !capsStargazing) || (ui::infoView==5 && !capsHighlights)) { ui::infoView=0; ui::infoCount=0; }
     ui::photosEnabled=capsPhotos && photoPixels;
     ui::mapsEnabled=capsMaps;
     ui::satellitesEnabled=capsSatellites;
@@ -654,6 +676,8 @@ void fetchInsight(int view) {
     if(view==1) path="/v1/weather?lat="+String(homeLat,4)+"&lon="+String(homeLon,4);
     else if(view==2) path="/v1/family?flight="+familyFlight+"&callsign="+familyCallsign+"&arrival="+familyArrival;
     else if(view==3) path="/v1/airports?lat="+String(homeLat,4)+"&lon="+String(homeLon,4);
+    else if(view==4) path="/v1/stargazing?lat="+String(homeLat,4)+"&lon="+String(homeLon,4);
+    else if(view==5) path="/v1/highlights";
     else return;
     JsonDocument doc;
     const bool ok=infoJSON(path,doc);
@@ -678,7 +702,7 @@ void fetchInsight(int view) {
             }
             for(JsonVariantConst line:p["lines"].as<JsonArrayConst>()) { if(n>=7) break; sky::copyText(out.lines[n++],line); }
         }
-        if(ui::infoCount) { ui::infoReceived=millis()-uint32_t(std::max(int64_t(0),age))*1000; ui::infoGenerated=generated; sky::copyText(ui::infoSource,doc["source"]); nextInsight=millis()+(view==2?20000:900000); }
+        if(ui::infoCount) { ui::infoReceived=millis()-uint32_t(std::max(int64_t(0),age))*1000; ui::infoGenerated=generated; sky::copyText(ui::infoSource,doc["source"]); nextInsight=millis()+(view==2?20000:view>=4?60000:900000); }
         else snprintf(ui::infoMessage,sizeof(ui::infoMessage),"Data unavailable / retrying");
     }
     lvgl_port_unlock();
@@ -823,14 +847,19 @@ void fetch() {
     deviceLog.printf("[feed] %s; next attempt in %lu ms\n",ok?"Success":"Failed",(unsigned long)retryDelay);
     nextFetch=millis()+retryDelay;
 }
+#include "device_api.h"
 }
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.8.1 / touch navigation refinements");
+    deviceLog.println("EchoScope 0.9.0 / connected observing");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
+    apiToken=prefs.getString("api_token","");
+    if(apiToken.length()!=32) { char token[33]; snprintf(token,sizeof(token),"%08lx%08lx%08lx%08lx",(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random()); apiToken=token; prefs.putString("api_token",apiToken); }
+    integrationEnabled=prefs.getBool("integration",false); satelliteAlerts=prefs.getBool("sat_alerts",false);
+    pickupKm=std::max<uint32_t>(5,std::min<uint32_t>(1000,prefs.getUInt("pickup_km",100)));
     familyFlight=prefs.getString("family_flight",""); familyCallsign=prefs.getString("family_call",""); familyArrival=prefs.getString("family_arr","");
     snprintf(ui::familyNumber,sizeof(ui::familyNumber),"%s",familyFlight.c_str());
     photoBase=prefs.getString("photo_url",""); ui::photosEnabled=false;
@@ -905,6 +934,7 @@ void setup() {
     configTime(0,0,"pool.ntp.org","time.google.com");
     const char *maintenanceHeaders[]={"X-EchoScope-Token","X-Firmware-Size","X-Firmware-MD5"};
     server.collectHeaders(maintenanceHeaders,3);
+    server.on("/api/state",HTTP_GET,apiState); server.on("/api/control",HTTP_POST,apiControl);
     server.on("/maintenance",HTTP_GET,maintenanceInfo);
     server.on("/update",HTTP_POST,finishFirmwareUpload,uploadFirmwareChunk);
     server.on("/logs",HTTP_GET,networkLogs);
@@ -928,6 +958,7 @@ void loop() {
         portal=false; lvgl_port_lock(-1); ui::settings=false; lvgl_port_unlock();
     }
     server.handleClient(); if(apActive) dns.processNextRequest();
+    if(!connected && configured && int32_t(now-nextReconnect)>=0) { WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=now+20000; }
     if(ui::asleep.load()) { delay(20); return; }
     if(!configured) {
         static uint32_t lastDemo=0;

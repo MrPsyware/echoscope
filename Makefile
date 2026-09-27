@@ -3,6 +3,7 @@ SHELL := /bin/bash
 
 PYTHON ?= python3
 DOCKER ?= docker
+DOCKER_ENV := $(if $(wildcard info-service/.env),--env-file info-service/.env,)
 PORT ?= /dev/ttyACM0
 BAUD ?= 115200
 IP ?=
@@ -84,8 +85,8 @@ clean:
 	$(PYTHON) scripts/clean.py
 
 docker:
-	$(DOCKER) compose -f info-service/compose.yaml up -d --build
+	$(DOCKER) compose $(DOCKER_ENV) -f info-service/compose.yaml up -d --build
 docker-down:
-	$(DOCKER) compose -f info-service/compose.yaml down
+	$(DOCKER) compose $(DOCKER_ENV) -f info-service/compose.yaml down
 docker-logs:
-	$(DOCKER) compose -f info-service/compose.yaml logs -f
+	$(DOCKER) compose $(DOCKER_ENV) -f info-service/compose.yaml logs -f

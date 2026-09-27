@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0
+
+- Add opt-in authenticated device API and Docker MQTT bridge with Home Assistant discovery, dynamic page/aircraft selectors, brightness, sleep/wake, pickup and aircraft status/list entities.
+- Add armed family pickup with fresh-position airport-distance alerts, a 24-hour session limit, persistent daily deduplication and explicit sleep disarming.
+- Add persistent bounded spotting history, Today's highlights on the knob and paged web history.
+- Add astronomical darkness, Moon illumination, cloud outlook and sunlit station predictions with opt-in wake alerts and live countdown.
+- Keep all expensive astronomy/history/broker processing on the server, advertise ready capabilities, and preserve operation without optional services.
+- Load Docker integration settings from info-service/.env; continue listening on 0.0.0.0.
+
 ## 0.8.1
 
 - Start in aircraft-selection mode, including after saving setup.
