@@ -68,32 +68,71 @@ def clock(value):
     return datetime.fromtimestamp(value, timezone.utc).strftime('%d %b %H:%M UTC')
 
 
+def weather_icon(code):
+    if code in (0, 1): return 0
+    if code == 2: return 1
+    if code == 3: return 2
+    if code in (45, 48): return 6
+    if code in (71, 73, 75, 77, 85, 86): return 4
+    if code in (95, 96, 97, 99): return 5
+    if code in (51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82): return 3
+    return 7
+
+
 def weather(lat, lon, download):
     def build():
-        query = urlencode({'latitude': lat, 'longitude': lon, 'timezone': 'GMT', 'timeformat': 'unixtime',
-                           'forecast_hours': 24,
-                           'current': 'temperature_2m,cloud_cover,wind_speed_10m,wind_direction_10m',
-                           'hourly': 'cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation_probability,is_day'})
+        query = urlencode({'latitude': lat, 'longitude': lon, 'timezone': 'auto',
+                           'forecast_days': 4,
+                           'current': 'temperature_2m,weather_code',
+                           'hourly': 'temperature_2m,weather_code,cloud_cover,precipitation_probability,wind_speed_10m,is_day',
+                           'daily': 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max'})
         data = json.loads(download('https://api.open-meteo.com/v1/forecast?' + query, 65536))
-        current, hourly = data['current'], data['hourly']
-        pages = [page('LOCAL WEATHER', clock(current['time']),
-                      'Cloud cover ' + number(current.get('cloud_cover'), '%'),
-                      'Temperature ' + number(current.get('temperature_2m'), ' C'),
-                      'Wind ' + number(current.get('wind_speed_10m'), ' km/h'),
-                      'From ' + number(current.get('wind_direction_10m'), ' degrees'),
-                      'Turn for 24h cloud forecast', 'Forecast, not a sky observation')]
-        for i in range(0, min(24, len(hourly['time'])), 3):
-            def value(key):
-                values = hourly.get(key, [])
-                return values[i] if i < len(values) else None
-            pages.append(page('CLOUD FORECAST', clock(hourly['time'][i]),
-                              'Cloud cover ' + number(value('cloud_cover'), '%'),
-                              'Low / mid / high cloud',
-                              ' / '.join(number(value(k), '%') for k in ('cloud_cover_low', 'cloud_cover_mid', 'cloud_cover_high')),
-                              'Rain chance ' + number(value('precipitation_probability'), '%'),
-                              'Night' if value('is_day') == 0 else 'Day' if value('is_day') == 1 else 'Day/night unavailable',
-                              'Cloud cover does not predict seeing'))
-        return result(pages, 'Open-Meteo / CC BY 4.0')
+        current, hourly, daily = data['current'], data['hourly'], data['daily']
+        now = datetime.fromisoformat(current['time'])
+        times = [datetime.fromisoformat(t) for t in hourly['time']]
+        future = next((n for n,t in enumerate(times) if t > now), None)
+        if future is None or len(daily['time']) < 4:
+            raise ValueError('Incomplete forecast')
+        def value(group, key, n):
+            values = group.get(key, [])
+            return values[n] if n < len(values) else None
+        def mean(values):
+            valid = [x for x in values if isinstance(x, (int,float)) and math.isfinite(x)]
+            return sum(valid)/len(valid) if valid else None
+        descriptions = ['Clear', 'Partly cloudy', 'Overcast', 'Rain', 'Snow', 'Thunderstorms', 'Fog', 'Unavailable']
+        def card(label, code, temperature, cloud, rain, wind, night=False):
+            icon = weather_icon(code)
+            return {'label': label, 'icon': icon, 'night': night, 'condition': descriptions[icon],
+                    'temperature': temperature, 'cloud': 'Cloud ' + number(cloud, '%'),
+                    'rain': 'Rain ' + number(rain, '%'), 'wind': 'Wind ' + number(wind, ' km/h')}
+        n = future
+        hour = card(times[n].strftime('%H:%M'), value(hourly,'weather_code',n),
+                    number(value(hourly,'temperature_2m',n),' C'), value(hourly,'cloud_cover',n),
+                    value(hourly,'precipitation_probability',n),value(hourly,'wind_speed_10m',n),value(hourly,'is_day',n)==0)
+        days=[]
+        for n, day in enumerate(daily['time'][:4]):
+            cloud = mean([value(hourly,'cloud_cover',j) for j,t in enumerate(times) if t.date().isoformat()==day])
+            days.append(card(datetime.fromisoformat(day).strftime('%a %d'),value(daily,'weather_code',n),
+                             number(value(daily,'temperature_2m_min',n))+' / '+number(value(daily,'temperature_2m_max',n),' C'),
+                             cloud,value(daily,'precipitation_probability_max',n),value(daily,'wind_speed_10m_max',n)))
+        # Upcoming night, noon-to-noon, excludes this morning's remaining darkness.
+        from datetime import timedelta
+        noon = now.replace(hour=12,minute=0,second=0)
+        night_cloud = mean([value(hourly,'cloud_cover',j) for j,t in enumerate(times)
+                            if noon<=t<noon+timedelta(days=1) and value(hourly,'is_day',j)==0])
+        for day in days:
+            day['cloud']=day['cloud'].replace('Cloud ', 'Avg cloud ', 1)
+        zone = clean(data.get('timezone_abbreviation') or data.get('timezone') or 'Local', 24)
+        def weather_page(title, cards, note, valid=None):
+            lines=[]
+            for c in cards:
+                lines.extend([c['label']+' '+c['condition'],c['temperature']+' / '+c['cloud']+' / '+c['rain']])
+            p=page(title, *lines, note)
+            p.update({'layout':'weather','subtitle':(valid or now).strftime('%d %b')+' / '+zone,'cards':cards,'note':note})
+            return p
+        return result([weather_page('NEXT HOUR',[hour],'Forecast / local time',times[future]),
+                       weather_page('TODAY',[days[0]],'Tonight cloud '+number(night_cloud,'%')),
+                       weather_page('NEXT 3 DAYS',days[1:],'Cloud: daily mean / rain: peak chance')], 'Open-Meteo / CC BY 4.0')
     return cached(('weather', lat, lon), 900, build)
 
 

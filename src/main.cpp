@@ -41,6 +41,7 @@ char photoAttempt[16]{};
 lv_color_t *photoPixels=nullptr,*mapPixels=nullptr;
 bool capsPhotos=false,capsMaps=false,capsSatellites=false,mapWanted=true;
 String familyFlight,familyCallsign,familyArrival;
+uint32_t nextRoute=0;
 uint32_t nextInsight=0; int lastInsight=0; String lastRoute;
 bool capsWeather=false,capsFlights=false,capsAirports=false;
 uint32_t nextCapabilities=0,nextMap=0,nextStations=0;
@@ -112,7 +113,7 @@ void controls(lv_timer_t *) {
     remainder+=steps;
     if(std::abs(remainder)>=transitionsPerDetent) {
         const int previousBand=ui::model.altitudeFilter;
-        if(!ui::settings) { if(ui::infoMenu || ui::infoView) ui::rotateInfo(remainder/transitionsPerDetent); else if(ui::satelliteView) ui::rotateStations(remainder/transitionsPerDetent); else ui::model.rotate(remainder/transitionsPerDetent,now); }
+        if(!ui::settings && !ui::pageAnimating) { if(ui::infoMenu || ui::infoView) ui::rotateInfo(remainder/transitionsPerDetent); else if(ui::satelliteView) ui::rotateStations(remainder/transitionsPerDetent); else ui::model.rotate(remainder/transitionsPerDetent,now); }
         if(previousBand!=ui::model.altitudeFilter) ui::requestFeed=true;
         remainder%=transitionsPerDetent;
     }
@@ -130,10 +131,11 @@ void controls(lv_timer_t *) {
                           event.longPress?"yes":"no",(ui::input.touchedDuringPress || ui::input.touching)?"yes":"no");
         } else if(event.kind==sky::ButtonDebounce::Hold && !wakeButton) requestPortal=true;
     }
-    if(ui::input.takeClick(millis())) {
+    if(ui::input.takeClick(millis()) && !ui::pageAnimating) {
         if(ui::settings) ui::settings=false;
         else if(ui::infoMenu || ui::infoView) ui::pressInfo();
         else if(ui::satelliteView) ui::satelliteView=false;
+        else if(ui::routePage) ui::swipeDetails(-1,now);
         else ui::model.press(now);
         deviceLog.printf("[input] Click accepted; rotation=%s\n",ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
     }
@@ -148,17 +150,26 @@ void controls(lv_timer_t *) {
 }
 void touch(lv_event_t *event) {
     const auto code=lv_event_get_code(event); const uint32_t now=millis();
-    static bool wakeTouch=false;
-    if(code==LV_EVENT_PRESSED) { ui::setupOpeningTouch=false; wakeTouch=wakeForInput(now,true); ui::input.touchBegin(now); return; }
-    if(code==LV_EVENT_PRESSING) { wakeForInput(now,true); return; }
-    if(code==LV_EVENT_RELEASED || code==LV_EVENT_PRESS_LOST) { wakeForInput(now,true); ui::input.touchEnd(now); return; }
+    static bool wakeTouch=false,consumeTap=false;
+    static sky::DetailGesture gesture;
+    lv_indev_t *device=lv_indev_get_act(); lv_point_t point{};
+    if(device) lv_indev_get_point(device,&point);
+    if(code==LV_EVENT_PRESSED) {
+        consumeTap=false; ui::setupOpeningTouch=false; wakeTouch=wakeForInput(now,true); ui::input.touchBegin(now);
+        gesture.begin(point.x,point.y); return;
+    }
+    if(code==LV_EVENT_PRESSING) { wakeForInput(now,true); gesture.move(point.x,point.y); return; }
+    if(code==LV_EVENT_RELEASED || code==LV_EVENT_PRESS_LOST) {
+        wakeForInput(now,true); ui::input.touchEnd(now); gesture.move(point.x,point.y);
+        consumeTap=consumeTap || gesture.moved;
+        if(code==LV_EVENT_RELEASED && !wakeTouch && !ui::setupOpeningTouch && gesture.direction()) ui::swipeDetails(gesture.direction(),now);
+        gesture.end(); return;
+    }
     if(code!=LV_EVENT_SHORT_CLICKED) return;
-    if(wakeTouch) { wakeTouch=false; return; }
-    if(ui::setupOpeningTouch) { ui::setupOpeningTouch=false; return; }
-    lv_indev_t *input=lv_indev_get_act(); if(!input) return;
-    lv_point_t p; lv_indev_get_point(input,&p);
-    lv_area_t area; lv_obj_get_coords(ui::canvas,&area);
-    ui::tap(p.x-area.x1,p.y-area.y1,millis());
+    // LVGL can emit SHORT_CLICKED before RELEASED. Suppress a drag in either order.
+    gesture.move(point.x,point.y);
+    if(wakeTouch || consumeTap || gesture.moved || ui::setupOpeningTouch || ui::pageAnimating) return;
+    ui::tap(point.x,point.y,now);
 }
 void demoFrame(uint32_t now) {
     incoming.count=6;
@@ -580,7 +591,7 @@ void discoverInfo() {
     capsAirports=ok && doc["capabilities"]["airports"]==true;
     lvgl_port_lock(-1);
     ui::weatherEnabled=capsWeather; ui::flightsEnabled=capsFlights; ui::airportsEnabled=capsAirports;
-    if((ui::infoView==1 && !capsWeather) || ((ui::infoView==2 || ui::infoView==4) && !capsFlights) || (ui::infoView==3 && !capsAirports)) { ui::infoView=0; ui::infoCount=0; }
+    if((ui::infoView==1 && !capsWeather) || (ui::infoView==2 && !capsFlights) || (ui::infoView==3 && !capsAirports)) { ui::infoView=0; ui::infoCount=0; }
     ui::photosEnabled=capsPhotos && photoPixels;
     ui::mapsEnabled=capsMaps;
     ui::satellitesEnabled=capsSatellites;
@@ -637,25 +648,34 @@ void fetchStations() {
     else { ui::satellitesEnabled=false; ui::satelliteView=false; ui::stationCount=0; }
     lvgl_port_unlock();
 }
-void fetchInsight(int view,const String &callsign) {
+void fetchInsight(int view) {
     nextInsight=millis()+30000;
     String path;
     if(view==1) path="/v1/weather?lat="+String(homeLat,4)+"&lon="+String(homeLon,4);
     else if(view==2) path="/v1/family?flight="+familyFlight+"&callsign="+familyCallsign+"&arrival="+familyArrival;
     else if(view==3) path="/v1/airports?lat="+String(homeLat,4)+"&lon="+String(homeLon,4);
-    else { String call=callsign; call.trim(); path="/v1/route?flight="+call; }
+    else return;
     JsonDocument doc;
     const bool ok=infoJSON(path,doc);
     const int64_t generated=doc["generated"] | int64_t(0);
     const int64_t age=int64_t(time(nullptr))-generated;
     const bool fresh=age>=-30 && age<=(view==2?60:1800);
     lvgl_port_lock(-1);
-    if(ui::infoView==view && (view!=4 || callsign==ui::routeNumber)) {
+    if(ui::infoView==view) {
         ui::infoCount=0;
         if(ok && fresh) for(JsonObjectConst p:doc["pages"].as<JsonArrayConst>()) {
             if(ui::infoCount>=9) break;
             auto &out=ui::infoPages[ui::infoCount++]; out={};
             sky::copyText(out.title,p["title"]); unsigned n=0;
+            if(view==1 && p["layout"]=="weather") {
+                sky::copyText(out.subtitle,p["subtitle"]); sky::copyText(out.note,p["note"]);
+                for(JsonObjectConst c:p["cards"].as<JsonArrayConst>()) {
+                    if(out.cardCount>=3) break; auto &card=out.cards[out.cardCount++];
+                    sky::copyText(card.label,c["label"]); sky::copyText(card.condition,c["condition"]); sky::copyText(card.temperature,c["temperature"]);
+                    sky::copyText(card.cloud,c["cloud"]); sky::copyText(card.rain,c["rain"]); sky::copyText(card.wind,c["wind"]);
+                    card.icon=c["icon"] | 7; if(card.icon<0 || card.icon>7) card.icon=7; card.night=c["night"] | false;
+                }
+            }
             for(JsonVariantConst line:p["lines"].as<JsonArrayConst>()) { if(n>=7) break; sky::copyText(out.lines[n++],line); }
         }
         if(ui::infoCount) { ui::infoReceived=millis()-uint32_t(std::max(int64_t(0),age))*1000; ui::infoGenerated=generated; sky::copyText(ui::infoSource,doc["source"]); nextInsight=millis()+(view==2?20000:900000); }
@@ -664,6 +684,18 @@ void fetchInsight(int view,const String &callsign) {
     lvgl_port_unlock();
     deviceLog.printf("[info] page=%d HTTP/JSON=%d fresh=%d\n",view,ok,fresh);
 }
+void fetchRoute(const String &call) {
+    lastRoute=call; nextRoute=millis()+30000;
+    JsonDocument doc; const bool ok=infoJSON("/v1/route?flight="+call,doc);
+    ui::InfoPage page{};
+    if(ok) {
+        sky::copyText(page.title,doc["pages"][0]["title"]); unsigned n=0;
+        for(JsonVariantConst line:doc["pages"][0]["lines"].as<JsonArrayConst>()) { if(n>=7) break; sky::copyText(page.lines[n++],line); }
+        if(n) nextRoute=millis()+21600000;
+        else snprintf(page.lines[0],sizeof(page.lines[0]),"No route available");
+    } else snprintf(page.lines[0],sizeof(page.lines[0]),"Route unavailable / retrying");
+    lvgl_port_lock(-1); ui::routeInfo=page; snprintf(ui::routeCall,sizeof(ui::routeCall),"%s",call.c_str()); ui::routeReady=true; lvgl_port_unlock();
+}
 void fetchInfo() {
     if(photoBase.isEmpty() || ui::asleep.load()) return;
     const uint32_t now=millis();
@@ -671,14 +703,16 @@ void fetchInfo() {
     lvgl_port_lock(-1);
     const bool skyView=ui::satelliteView,radar=!ui::settings && !ui::model.details && !skyView && !ui::infoMenu && !ui::infoView;
     const int insight=ui::settings?0:ui::infoView;
-    const String routeCall=ui::routeNumber;
+    const auto *routeAircraft=ui::model.selection();
+    const String routeTarget=ui::model.details && !ui::settings && ui::flightsEnabled?String(routeAircraft?routeAircraft->callsign:ui::detailCall):String("");
     const bool needsInfo=ui::infoNeedsFetch; ui::infoNeedsFetch=false;
     const int rangeIndex=ui::model.rangeIndex;
     lvgl_port_unlock();
     if(insight) {
-        if(needsInfo || lastInsight!=insight || (insight==4 && routeCall!=lastRoute)) { nextInsight=0; lastInsight=insight; lastRoute=routeCall; }
-        if(int32_t(now-nextInsight)>=0) { fetchInsight(insight,routeCall); return; }
+        if(needsInfo || lastInsight!=insight) { nextInsight=0; lastInsight=insight; }
+        if(int32_t(now-nextInsight)>=0) { fetchInsight(insight); return; }
     } else lastInsight=0;
+    if(routeTarget.length() && (routeTarget!=lastRoute || int32_t(now-nextRoute)>=0)) { fetchRoute(routeTarget); return; }
     if(skyView && capsSatellites && int32_t(now-nextStations)>=0) { fetchStations(); return; }
     if(radar && capsMaps && mapWanted) {
         if(requestedMapRange!=rangeIndex) nextMap=now;
@@ -793,7 +827,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.7.0 / family flights and observing weather");
+    deviceLog.println("EchoScope 0.8.0 / swipeable aircraft routes and weather cards");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
@@ -829,11 +863,15 @@ void setup() {
     assert(lvgl_port_init(board->getLCD(),board->getTouch()));
     auto *pixels=(lv_color_t*)heap_caps_malloc(ui::size*ui::size*sizeof(lv_color_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     assert(pixels);
+    // Optional PSRAM snapshots allow LVGL to slide images without redrawing labels.
+    for(auto &buffer:ui::slidePixels) buffer=static_cast<lv_color_t*>(heap_caps_malloc(ui::size*ui::size*sizeof(lv_color_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
+    if(!ui::slidePixels[0] || !ui::slidePixels[1]) { for(auto &buffer:ui::slidePixels) { free(buffer); buffer=nullptr; } deviceLog.println("[display] Slide snapshots unavailable; using immediate page changes"); }
     auto *histories=static_cast<sky::Trail*>(heap_caps_malloc(sizeof(sky::Trail)*sky::maxAircraft,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
     assert(histories);
     for(size_t i=0;i<sky::maxAircraft;++i) new (histories+i) sky::Trail{};
     lvgl_port_lock(-1);
     lv_obj_set_style_bg_color(lv_scr_act(),lv_color_black(),0);
+    lv_obj_clear_flag(lv_scr_act(),LV_OBJ_FLAG_SCROLLABLE);
     ui::model.trails=histories;
     ui::canvas=lv_canvas_create(lv_scr_act()); lv_canvas_set_buffer(ui::canvas,pixels,ui::size,ui::size,LV_IMG_CF_TRUE_COLOR);
     lv_obj_center(ui::canvas); lv_obj_add_flag(ui::canvas,LV_OBJ_FLAG_CLICKABLE); lv_obj_clear_flag(ui::canvas,LV_OBJ_FLAG_SCROLLABLE);

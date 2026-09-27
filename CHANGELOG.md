@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0
+
+- Move selected aircraft routes from INFO into a second aircraft-details page: swipe left for route, right for details, with quarter-circle rim markers.
+- Add a 380 ms eased slide using two cached PSRAM images; gracefully fall back to an immediate page change if snapshots cannot be allocated.
+- Prefetch routes when viewing aircraft details, retain the selected callsign after it leaves coverage, and reset to details when selecting a different aircraft.
+- Recognize horizontal swipes without treating them as taps or mechanical clicks; rim markers can also be tapped.
+- Simplify weather to next hour, today (including tonight's cloud cover), and the following three days with vector weather icons, local dates/times, temperatures, cloud averages and rain chances.
+- Keep weather responses compatible with older text-only firmware and retain existing family-flight tracking.
+
 ## 0.7.0
 
 - Add a capability-aware INFO menu for weather, family flight tracking, nearby airports, selected flight routes and space stations.

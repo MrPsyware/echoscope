@@ -1,5 +1,6 @@
 #include "radar_model.h"
 #include "input_gate.h"
+#include "detail_gesture.h"
 #include "activity.h"
 #include "button_debounce.h"
 #include "network_policy.h"
@@ -7,6 +8,13 @@
 #include <iostream>
 int main() {
     using namespace sky;
+    DetailGesture gesture;
+    gesture.begin(300,200); gesture.move(220,205); assert(gesture.direction()==1 && gesture.moved);
+    gesture.end(); assert(!gesture.direction());
+    gesture.begin(200,200); gesture.move(280,205); assert(gesture.direction()==-1);
+    gesture.begin(200,200); gesture.move(208,206); assert(!gesture.direction() && !gesture.moved);
+    gesture.begin(200,200); gesture.move(180,290); assert(!gesture.direction() && gesture.moved);
+    gesture.begin(200,200); gesture.move(230,200); assert(!gesture.direction() && gesture.moved);
     Model startup; startup.defaultRangeIndex=4; startup.reset(); assert(startup.range()==100);
     startup.rotate(-2,0); assert(startup.range()==25); startup.reset(); assert(startup.range()==100);
     AlertStyle style;

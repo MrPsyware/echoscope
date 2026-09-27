@@ -2,25 +2,24 @@
 // Included inside namespace ui after drawing helpers.
 inline bool weatherEnabled=false,flightsEnabled=false,airportsEnabled=false;
 inline bool infoMenu=false,infoNeedsFetch=false;
-inline char routeNumber[16]{};
-inline int infoSelection=0,infoView=0,infoPage=0; // 1 weather, 2 family, 3 airports, 4 route
+inline int infoSelection=0,infoView=0,infoPage=0; // 1 weather, 2 family, 3 airports
 inline char familyNumber[11]{};
-struct InfoPage { char title[33]{}; char lines[7][61]{}; };
+struct WeatherCard { char label[20]{},condition[24]{},temperature[24]{},cloud[24]{},rain[24]{},wind[24]{}; int icon=7; bool night=false; };
+struct InfoPage { char title[33]{}; char lines[7][61]{}; char subtitle[48]{},note[64]{}; WeatherCard cards[3]{}; unsigned cardCount=0; };
 inline InfoPage infoPages[9]{};
 inline unsigned infoCount=0;
 inline uint32_t infoReceived=0,infoGenerated=0;
 inline char infoSource[64]{},infoMessage[64]="Loading...";
-inline bool hasRouteSelection() { const auto *a=model.selection(); return a && a->callsign[0]; }
-inline bool infoAvailable() { return satellitesEnabled || weatherEnabled || (flightsEnabled && (familyNumber[0] || hasRouteSelection())) || airportsEnabled; }
+inline bool infoAvailable() { return satellitesEnabled || weatherEnabled || (flightsEnabled && (familyNumber[0])) || airportsEnabled; }
 inline bool infoOption(int option) {
-    return option==0?satellitesEnabled:option==1?weatherEnabled:option==2?flightsEnabled && familyNumber[0]:option==3?airportsEnabled:flightsEnabled && hasRouteSelection();
+    return option==0?satellitesEnabled:option==1?weatherEnabled:option==2?flightsEnabled && familyNumber[0]:option==3?airportsEnabled:false;
 }
 inline void rotateInfo(int delta) {
     if(infoView) { if(infoCount) infoPage=(infoPage+delta%int(infoCount)+int(infoCount))%int(infoCount); return; }
     if(!infoAvailable()) return;
     int step=delta<0?-1:1;
-    for(int n=0;n<std::abs(delta);++n) for(int i=0;i<5;++i) {
-        infoSelection=(infoSelection+step+5)%5;
+    for(int n=0;n<std::abs(delta);++n) for(int i=0;i<4;++i) {
+        infoSelection=(infoSelection+step+4)%4;
         if(infoOption(infoSelection)) break;
     }
 }
@@ -34,16 +33,16 @@ inline void pressInfo() {
     infoMenu=false;
     if(infoSelection==0) { satelliteView=true; return; }
     infoNeedsFetch=true;
-    if(infoSelection==4) snprintf(routeNumber,sizeof(routeNumber),"%s",model.selection()->callsign);
     infoView=infoSelection; infoCount=0; infoPage=0; infoReceived=0;
     snprintf(infoMessage,sizeof(infoMessage),"Loading...");
 }
+#include "weather_ui.h"
 inline void renderInfo(uint32_t now) {
     if(infoMenu) {
         text(65,"INFORMATION",&lv_font_montserrat_24,green);
-        const char *labels[]={"Space stations","Weather / clouds","Family flight","Nearby airports","Selected flight route"};
+        const char *labels[]={"Space stations","Weather / clouds","Family flight","Nearby airports"};
         int row=0;
-        for(int i=0;i<5;++i) if(infoOption(i)) {
+        for(int i=0;i<4;++i) if(infoOption(i)) {
             const int y=130+row++*44;
             text(y,labels[i],&lv_font_montserrat_20,i==infoSelection?green:muted);
             if(i==infoSelection) line(110,y+28,356,y+28,green,2);
@@ -59,6 +58,7 @@ inline void renderInfo(uint32_t now) {
     } else {
         if(infoPage>=int(infoCount)) infoPage=0;
         const auto &p=infoPages[infoPage];
+        if(p.cardCount) { renderWeather(p); return; }
         lv_point_t bounds;
         lv_txt_get_size(&bounds,p.title,&lv_font_montserrat_22,0,0,320,LV_TEXT_FLAG_NONE);
         text(65,p.title,bounds.y>48?&lv_font_montserrat_18:&lv_font_montserrat_22,green,73,320);
@@ -81,7 +81,7 @@ inline void tapInfo(int y) {
     if(infoView) { pressInfo(); return; }
     if(y>=365) { infoMenu=false; return; }
     int row=0;
-    for(int i=0;i<5;++i) if(infoOption(i)) {
+    for(int i=0;i<4;++i) if(infoOption(i)) {
         const int top=122+row++*44;
         if(y>=top && y<top+44) { infoSelection=i; pressInfo(); return; }
     }

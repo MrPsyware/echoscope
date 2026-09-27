@@ -7,6 +7,7 @@
 #include "radar_model.h"
 #include "input_gate.h"
 #include "activity.h"
+#include "detail_gesture.h"
 namespace ui {
 constexpr int size=466, centre=233, radius=210;
 constexpr uint32_t green=0x68F3AE, muted=0x63958E, grid=0x143B36, white=0xE8F8F4, amber=0xF2BB70;
@@ -100,7 +101,77 @@ inline void renderStations(uint32_t now) {
     text(391,label,&lv_font_montserrat_14,muted);
     text(420,"Predicted / CelesTrak",&lv_font_montserrat_14,muted);
 }
+inline bool routePage=false,routeReady=false;
+inline char detailHex[12]{},detailCall[16]{},routeCall[16]{};
+inline InfoPage routeInfo{};
+inline bool pageAnimating=false;
+inline lv_color_t *slidePixels[2]{};
+inline lv_img_dsc_t slideImages[2]{};
+inline lv_obj_t *slideObjects[2]{};
+inline int slideDirection=1;
+inline void render(uint32_t now);
+inline bool routeAvailable() { return flightsEnabled && detailCall[0]; }
+inline void rimMarker(bool left) {
+    const float start=left?135:-45;
+    for(int i=0;i<30;++i) {
+        const float a=(start+3*i)*sky::pi/180,b=(start+3*(i+1))*sky::pi/180;
+        line(233+226*std::cos(a),233+226*std::sin(a),233+226*std::cos(b),233+226*std::sin(b),green,3);
+    }
+}
+inline void finishSlide() {
+    if(!pageAnimating) return;
+    for(auto *&obj:slideObjects) { if(obj) lv_obj_del(obj); obj=nullptr; }
+    pageAnimating=false;
+}
+inline bool swipeDetails(int direction,uint32_t now) {
+    if(settings || infoMenu || infoView || satelliteView || !model.details || pageAnimating) return false;
+    // A rapid swipe can arrive before the regular frame catches a new selection.
+    if(const auto *a=model.selection()) if(std::strcmp(detailHex,a->hex) || std::strcmp(detailCall,a->callsign)) render(now);
+    if(!routeAvailable()) return false;
+    if((direction>0 && routePage) || (direction<0 && !routePage) || !direction) return false;
+    if(slidePixels[0] && slidePixels[1]) memcpy(slidePixels[0],lv_canvas_get_img(canvas)->data,size*size*sizeof(lv_color_t));
+    routePage=direction>0;
+    render(now);
+    if(!slidePixels[0] || !slidePixels[1]) return true; // Low-memory fallback preserves navigation.
+    memcpy(slidePixels[1],lv_canvas_get_img(canvas)->data,size*size*sizeof(lv_color_t));
+    slideDirection=direction;
+    for(int i=0;i<2;++i) {
+        lv_img_cache_invalidate_src(&slideImages[i]);
+        slideImages[i].header.cf=LV_IMG_CF_TRUE_COLOR; slideImages[i].header.w=size; slideImages[i].header.h=size;
+        slideImages[i].data_size=size*size*sizeof(lv_color_t); slideImages[i].data=reinterpret_cast<uint8_t*>(slidePixels[i]);
+        slideObjects[i]=lv_img_create(lv_scr_act()); lv_img_set_src(slideObjects[i],&slideImages[i]);
+        lv_obj_clear_flag(slideObjects[i],LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_pos(slideObjects[i],i*direction*size,0);
+    }
+    pageAnimating=true;
+    lv_anim_t animation; lv_anim_init(&animation); lv_anim_set_var(&animation,canvas);
+    lv_anim_set_values(&animation,0,-direction*size); lv_anim_set_time(&animation,380);
+    lv_anim_set_path_cb(&animation,lv_anim_path_ease_out);
+    lv_anim_set_exec_cb(&animation,[](void*,int32_t x) { if(pageAnimating) { lv_obj_set_x(slideObjects[0],x); lv_obj_set_x(slideObjects[1],x+slideDirection*size); } });
+    lv_anim_set_ready_cb(&animation,[](lv_anim_t*) { finishSlide(); }); lv_anim_start(&animation);
+    return true;
+}
+inline void renderRoute() {
+    rimMarker(true);
+    text(54,detailCall,&lv_font_montserrat_28,white);
+    text(97,"FLIGHT ROUTE",&lv_font_montserrat_18,green);
+    if(!routeReady || std::strcmp(routeCall,detailCall)) text(215,"Loading route...",&lv_font_montserrat_20,muted);
+    else for(int i=0;i<7;++i) {
+        lv_point_t bounds; lv_txt_get_size(&bounds,routeInfo.lines[i],&lv_font_montserrat_16,0,0,350,LV_TEXT_FLAG_NONE);
+        text(145+i*32,routeInfo.lines[i],bounds.y>30?&lv_font_montserrat_12:&lv_font_montserrat_16,i==1?green:muted,58,350);
+    }
+    text(395,"Route database: adsbdb",&lv_font_montserrat_14,muted);
+    text(422,"Swipe right for aircraft",&lv_font_montserrat_12,muted);
+}
 inline void render(uint32_t now) {
+    if(pageAnimating) return;
+    if(!model.details) { routePage=false; detailHex[0]=0; }
+    else if(const auto *a=model.selection()) {
+        if(std::strcmp(detailHex,a->hex) || std::strcmp(detailCall,a->callsign)) {
+            snprintf(detailHex,sizeof(detailHex),"%s",a->hex); snprintf(detailCall,sizeof(detailCall),"%s",a->callsign); routePage=false;
+        }
+    }
+    if(!routeAvailable()) routePage=false;
     model.refresh(now);
     lv_canvas_fill_bg(canvas,lv_color_hex(0x030D10),LV_OPA_COVER);
     if(settings) {
@@ -123,7 +194,9 @@ inline void render(uint32_t now) {
     const bool stale=!model.demo && (!model.hasUpdate || uint32_t(now-model.lastUpdate)>20000);
     // Attribution remains in setup/details; normal live operation needs no banner.
     if(model.details && (stale || model.demo)) text(22,model.demo?"DEMO":"DATA STALE",&lv_font_montserrat_14,amber);
+    if(model.details && routePage) { renderRoute(); return; }
     if(model.details) {
+        if(routeAvailable()) rimMarker(false);
         auto *a=model.selection();
         if(!a) {
             text(145,"Aircraft left coverage",&lv_font_montserrat_22,amber);
@@ -256,10 +329,13 @@ inline void render(uint32_t now) {
     if(stale) text(365,status,&lv_font_montserrat_14,amber);
 }
 inline void tap(int x,int y,uint32_t now) {
+    if(pageAnimating) return;
     if(settings) { settings=false; return; }
     if(infoMenu || infoView) { tapInfo(y); return; }
     if(satelliteView) { satelliteView=false; return; }
     if(model.details) {
+        if(routeAvailable() && ((!routePage && x>420) || (routePage && x<46)) && y>=73 && y<=393) { swipeDetails(routePage?-1:1,now); return; }
+        if(routePage) { swipeDetails(-1,now); return; }
         model.details=false; model.refresh(now); return;
     }
     if(infoAvailable() && y>=70 && y<=108 && x>=305 && x<=395) { openInfo(); return; }
