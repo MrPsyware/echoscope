@@ -1,4 +1,4 @@
-# EchoScope interface conventions — 0.11.0
+# EchoScope interface conventions — 0.12.0
 
 - **Rotate = items.** Clockwise advances an aircraft, forecast period, log entry,
   station, airport or information-menu entry. It wraps at either end. Changing items
@@ -49,3 +49,9 @@ Display sleep continues polling every 30 seconds; fresh visible watch matches us
 unless the user interacts. Range, type and altitude filters apply. Failed requests
 retain the last match for at most 60 seconds and keep normal error backoff.
 Explicit remote screen-off suppresses watch wake until a successful no-match feed.
+
+Airport markers are a passive layer behind aircraft and trails. Small outlined
+squares with a symbolic runway bar and optional airport-code labels use a separate
+configurable colour/brightness. They do not change aircraft hit testing. Crowded
+labels and markers are suppressed; use web setup's Info server section to filter
+scheduled airline airports and airport sizes, or disable the overlay.

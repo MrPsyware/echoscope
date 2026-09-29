@@ -20,7 +20,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError
 from PIL import Image
 
-USER_AGENT = 'EchoScope/0.11.0 (+https://github.com/MrPsyware/echoscope)'
+USER_AGENT = 'EchoScope/0.12.0 (+https://github.com/MrPsyware/echoscope)'
 REG = re.compile(r'[A-Z0-9][A-Z0-9-]{0,14}\Z')
 CACHE = OrderedDict()
 LOCK = threading.Lock()
@@ -149,6 +149,7 @@ class Handler(BaseHTTPRequestHandler):
                                      'maps': extras.MAPS, 'satellites': bool(extras.available_satellites()),
                                      'stargazing': observing.ready(), 'highlights': integration.ready(),
                                      'weather': insights.WEATHER, 'flights': insights.FLIGHTS,
+                                     'airport_overlay': insights.overlay_ready(),
                                      'airports': insights.AIRPORTS and bool(insights.AIRPORT_INDEX)},
                     'map_credit': extras.MAP_CREDIT}
             return self.reply(200, json.dumps(body).encode(), 'application/json')
@@ -189,6 +190,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200,json.dumps(body,allow_nan=False).encode(),'application/json')
             except (OSError,ValueError,KeyError,TypeError):
                 return self.reply(502,b'Observing data unavailable','text/plain')
+            finally: GATE.release()
+        if path == '/v1/airport-overlay':
+            if not insights.overlay_ready(): return self.reply(404,b'Airport overlay unavailable','text/plain')
+            if not GATE.acquire(blocking=False): return self.reply(503,b'Busy','text/plain')
+            try:
+                lat,lon,query=extras.location(urlsplit(self.path).query)
+                body=insights.airport_overlay(lat,lon,int(query['range'][0]),query.get('mode',['airline'])[0],query.get('size',['any'])[0])
+                return self.reply(200,json.dumps(body,allow_nan=False).encode(),'application/json')
+            except (ValueError,KeyError,TypeError):
+                return self.reply(400,b'Invalid airport overlay query','text/plain')
             finally: GATE.release()
         if path in ('/v1/weather', '/v1/family', '/v1/route', '/v1/airports'):
             enabled = insights.WEATHER if path.endswith('weather') else insights.AIRPORTS and bool(insights.AIRPORT_INDEX) if path.endswith('airports') else insights.FLIGHTS

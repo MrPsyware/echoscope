@@ -1,9 +1,8 @@
 # EchoScope
 
-**New in 0.11.0:** four consistent radar controls, page-preserving aircraft
-navigation, tidier menus and setup, and sleeping watchlist monitoring with optional
-automatic wake. See [UI conventions](docs/INTERFACE.md) and
-[server/integration setup](info-service/INTEGRATION.md).
+**New in 0.12.0:** airport markers on the radar, with airline-service and size
+filters, optional airport-code labels, and configurable colour/brightness. Update
+both firmware and the Docker info server. See [airport overlay](#airport-overlay).
 
 
 
@@ -25,7 +24,7 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 - N/E/S/W compass labels and a decorative radar sweep.
 - Local Wi-Fi/location setup, saved settings, stale-data indication and reconnection handling.
 
-Latest firmware: **0.11.0**. Update both firmware and the Docker information server for the enhanced logbook.
+Latest firmware: **0.12.0**. Update both firmware and the Docker information server for the enhanced logbook.
 
 ## Hardware status
 
@@ -274,3 +273,27 @@ The route page shows the database origin/destination and airline when known. Thi
 The 380 ms eased transition moves cached LVGL images rather than redrawing text on every animation frame. Two optional 466x466 RGB565 snapshots use 868,624 bytes of PSRAM (about 0.83 MiB). If allocation fails, swipes still change pages immediately. Animation responsiveness depends on the physical display; native previews cannot measure hardware frame rate.
 
 Update both parts for the new weather cards: `git pull && make docker` on the server, then pull the firmware checkout and use your normal upload command. New firmware also accepts the old server's text weather pages; older firmware can read the new server's text fallback.
+
+## Airport overlay
+
+Under **Info server features → Airport overlay** in web setup:
+
+- Airports: Off, Airline airports (default), or All airports.
+- Size: Any (default), Medium + large, or Large only.
+- Airport-code labels: enabled by default; IATA codes such as LGW/LHR, falling back to ICAO/local identifiers.
+- Colour and brightness: muted blue-grey (`#9BB8CD`) at 35% by default; brightness is relative to the display.
+
+Airline airports means the OurAirports dataset reports scheduled airline service;
+size is a separate dataset category. Closed airports and heliports are excluded.
+Markers are outlined squares with a symbolic runway bar (not actual runway heading),
+drawn behind trails and aircraft. Crowded markers/labels and labels near aircraft
+are omitted. The server returns at most 32 airports within the current radius,
+prioritising scheduled service, larger airports, then distance. Edge/footer markers
+may be omitted to preserve the round screen's controls. Zooming in reduces clutter.
+
+Works on plain radar or over the street map. Requires the updated info server's
+`airport_overlay` capability; the overlay/settings disappear if it is absent.
+The server reuses its daily OurAirports cache and automatically upgrades older cache
+files to retain size categories. The knob refreshes markers on range changes and
+every ten minutes while viewing the radar; failures retry after 30 seconds.
+No extra API key, image download or framebuffer is needed. Data: OurAirports.

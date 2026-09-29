@@ -245,6 +245,28 @@ def nearby(lat, lon):
                         f"{a['lat']:.3f}, {a['lon']:.3f}", 'Not navigation information') for a in closest], 'OurAirports / public domain')
 
 
+def overlay_ready():
+    return AIRPORTS and bool(AIRPORT_INDEX) and all('type' in a for a in AIRPORT_INDEX)
+
+
+def airport_overlay(lat, lon, radius, mode='airline', size='any'):
+    if radius not in (5, 10, 25, 50, 100) or mode not in ('airline', 'all') or size not in ('any', 'medium', 'large'):
+        raise ValueError('Invalid airport overlay filter')
+    if not overlay_ready():
+        raise ValueError('Airport overlay unavailable')
+    rank={'large_airport':0, 'medium_airport':1, 'small_airport':2}
+    selected=[]
+    for a in AIRPORT_INDEX:
+        level=rank.get(a['type'],3)
+        if level>2 or (mode=='airline' and not a['scheduled']) or (size=='medium' and level>1) or (size=='large' and level>0): continue
+        km=distance(lat,lon,a['lat'],a['lon'])
+        if km<=radius: selected.append((not a['scheduled'],level,km,a['icao'],a))
+    selected.sort(key=lambda row:row[:4])
+    return {'airports':[{'code':a['iata'] or a['icao'], 'lat':round(a['lat'],6), 'lon':round(a['lon'],6),
+                         'size':level, 'scheduled':a['scheduled']} for _,level,_,_,a in selected[:32]],
+            'source':'OurAirports', 'range':radius}
+
+
 def load_airports(download):
     global AIRPORT_INDEX
     path = extras.CACHE_DIR / 'airports-index.json'
@@ -253,7 +275,7 @@ def load_airports(download):
             cached_data = json.loads(path.read_text())
             if isinstance(cached_data, list) and len(cached_data) <= 60000:
                 AIRPORT_INDEX = tuple(cached_data)
-            if AIRPORT_INDEX and time.time() - path.stat().st_mtime < 86400:
+            if AIRPORT_INDEX and all('type' in a for a in AIRPORT_INDEX) and time.time() - path.stat().st_mtime < 86400:
                 return
         except (ValueError, OSError):
             pass
@@ -265,7 +287,7 @@ def load_airports(download):
         lat, lon = float(a['latitude_deg']), float(a['longitude_deg'])
         if not math.isfinite(lat) or not math.isfinite(lon) or abs(lat)>90 or abs(lon)>180:
             continue
-        rows.append({'name': clean(a['name'], 48), 'town': clean(a['municipality'], 48), 'lat': lat, 'lon': lon,
+        rows.append({'type':a['type'], 'name': clean(a['name'], 48), 'town': clean(a['municipality'], 48), 'lat': lat, 'lon': lon,
                      'iata': clean(a['iata_code'], 4), 'icao': clean(a.get('icao_code') or a['gps_code'] or a['ident'], 8),
                      'scheduled': a['scheduled_service'] == 'yes'})
         if len(rows)>60000:

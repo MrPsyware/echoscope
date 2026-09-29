@@ -171,3 +171,13 @@ Sources: [Home Assistant MQTT discovery](https://www.home-assistant.io/integrati
 [Skyfield satellite visibility](https://rhodesmill.org/skyfield/earth-satellites.html),
 [Skyfield almanac](https://rhodesmill.org/skyfield/almanac.html), JPL DE421,
 CelesTrak, Open-Meteo (CC BY 4.0), adsb.fi, adsbdb and OurAirports.
+
+## Radar airports (0.12.0)
+
+With `ENABLE_AIRPORTS=1` (default), a size-aware airport index advertises
+`capabilities.airport_overlay`. Firmware requests
+`/v1/airport-overlay?lat=51.5&lon=0&range=50&mode=airline&size=any`.
+Ranges are 5/10/25/50/100 km; mode is airline/all; size is any/medium/large.
+The response includes at most 32 airports, ordered by scheduled airline service,
+size, then proximity. It is independent of map tiles and MQTT device integration.
+Existing cache files upgrade automatically on the next successful dataset refresh.

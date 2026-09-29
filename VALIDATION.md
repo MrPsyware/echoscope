@@ -204,3 +204,10 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
 - Native LVGL rendering inspected for the four-control radar footer, reordered six-item Information menu and unavailable route page. Interaction assertions passed for route-page retention (including missing callsign), logbook trace retention, menu ordering and grouped subpages.
 - Release firmware built and packaged: application 1,766,048 bytes; static RAM 96,916 bytes. No new framebuffer allocations.
 - Hardware was not flashed. Verify physical footer taps, idle polling and watch-triggered wake/return on the knob after updating. Error retry backoff remains in force; the sleep intervals are delays between requests, not guaranteed wall-clock sample periods.
+
+## Version 0.12.0 — airport overlay
+
+- Host model/JSON/photo/network-tool tests passed; 41 info-service tests passed. Added coverage for scheduled-service and size filters, radius, date-line proximity, bounded/prioritised results, invalid queries, capability gating and legacy airport-cache migration.
+- Docker image built; an isolated read-only container returned the overlay capability and a filtered airport packet over HTTP, including an empty result outside the selected range. Test container stopped afterwards.
+- Native LVGL render inspected with sample London-area airport positions and a synthetic 32-airport crowding case. Assertions cover label on/off, zero brightness, unavailable capability and range mismatch. Markers are rendered before sweep, trails and aircraft. Physical display brightness/legibility still needs checking on the knob.
+- ESP32-S3 release build passed using two compiler jobs after the initial full parallel build exceeded local memory. Application: 1,773,192 bytes; static RAM: 97,716 bytes. Firmware packaged with checksums. No new framebuffer allocation and no device flashing performed.

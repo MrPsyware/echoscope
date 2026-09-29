@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.0
+
+- Add range-aware airport overlay through the info server, defaulting to airports with scheduled airline service.
+- Add Off/Airline/All, airport-size, code-label, colour and brightness controls under Info server features in setup.
+- Draw subtle square/runway markers behind trails and aircraft; suppress crowded labels, overlapping markers and text near aircraft.
+- Advertise overlay support separately, bound responses to 32 prioritised airports and automatically upgrade existing airport caches with size categories.
+
 ## 0.11.0
 
 - Standardise Range, Aircraft, Alt and Type: click to change mode, tap to select, tap again to advance its value. Show Alt and Type values together.

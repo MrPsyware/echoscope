@@ -51,6 +51,7 @@ inline void text(int y,const char *s,const lv_font_t *font=&lv_font_montserrat_1
 inline lv_point_t screen(sky::Point p) {
     return {lv_coord_t(centre+p.east/model.range()*radius),lv_coord_t(centre-p.north/model.range()*radius)};
 }
+#include "airport_ui.h"
 #include "navigation.h"
 #include "insight_ui.h"
 #include "logbook_ui.h"
@@ -271,6 +272,7 @@ inline void render(uint32_t now) {
     text(drawMap?357:378,"S",&lv_font_montserrat_14,muted);
     text(225,"W",&lv_font_montserrat_14,muted,38,26);
     text(225,"E",&lv_font_montserrat_14,muted,402,26);
+    renderAirports();
     // Sweep is decorative. Aircraft are always drawn from their last reported position.
     const float angle=(now%8000)*2*sky::pi/8000;
     for(int i=0;i<9;++i) {

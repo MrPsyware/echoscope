@@ -48,7 +48,9 @@ uint32_t nextLog=0,nextLogMap=0,lastLogRequested=0;
 uint32_t nextInsight=0; int lastInsight=0; String lastRoute;
 bool capsWeather=false,capsFlights=false,capsAirports=false,capsStargazing=false,capsHighlights=false;
 uint32_t nextCapabilities=0,nextMap=0,nextStations=0;
-int requestedMapRange=-1;
+int requestedMapRange=-1,requestedAirportRange=-1;
+bool capsAirportOverlay=false;
+uint32_t nextAirports=0;
 
 double homeLat=0,homeLon=0;
 bool configured=false,portal=false,apActive=false;
@@ -343,7 +345,7 @@ String alertColorInput(const char *name,const char *label,uint32_t color) {
 void setupPage() {
     if(!portal) { server.send(403,"text/plain","Hold the knob for 5 seconds to enable setup."); return; }
     String page=R"HTML(<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>EchoScope setup</title>
-<style>body{background:#071918;color:#e8f8f4;font:17px system-ui;max-width:440px;margin:40px auto;padding:24px}h1{color:#68f3ae}label{display:block;margin:22px 0 6px}input,button{box-sizing:border-box;width:100%;padding:13px;border-radius:8px;border:1px solid #52716a;font:inherit}button{background:#68f3ae;margin-top:26px}p{line-height:1.5}h2{border-top:1px solid #52716a;padding-top:22px}fieldset{margin:32px 0 0;padding:16px;border:1px solid #52716a;border-radius:12px;min-width:0}legend{color:#68f3ae;font-weight:bold}h3{margin-top:28px}</style>
+<style>body{background:#071918;color:#e8f8f4;font:17px system-ui;max-width:440px;margin:40px auto;padding:24px}h1{color:#68f3ae}label{display:block;margin:22px 0 6px}input,button,select{box-sizing:border-box;width:100%;padding:13px;border-radius:8px;border:1px solid #52716a;font:inherit}button{background:#68f3ae;margin-top:26px}p{line-height:1.5}h2{border-top:1px solid #52716a;padding-top:22px}fieldset{margin:32px 0 0;padding:16px;border:1px solid #52716a;border-radius:12px;min-width:0}legend{color:#68f3ae;font-weight:bold}h3{margin-top:28px}</style>
 <h1>EchoScope</h1><p>Choose your home Wi-Fi and the centre of your radar. Coordinates are decimal degrees; west and south are negative.</p><form method="post" action="/save">
 )HTML";
     page+="<input type='hidden' name='token' value='"+csrf+"'>";
@@ -383,6 +385,17 @@ void setupPage() {
         page+="<label>Flight number (blank disables)</label><input name='family_flight' maxlength='10' placeholder='U2123' value='"+escape(familyFlight)+"'>";
         page+="<label>Actual callsign override (optional)</label><input name='family_callsign' maxlength='10' placeholder='EZY123' value='"+escape(familyCallsign)+"'>";
         page+="<label>Arrival airport IATA / ICAO (optional)</label><input name='family_arrival' maxlength='10' placeholder='LGW' value='"+escape(familyArrival)+"'>";
+    }
+    if(capsAirportOverlay) {
+        page+="<h3>Airport overlay</h3><input type='hidden' name='airport_setting' value='1'><label>Airports</label><select name='airport_mode'>";
+        const char *modes[]={"Off","Airline airports","All airports"};
+        for(unsigned i=0;i<3;++i) page+="<option value='"+String(i)+"' "+String(i==ui::airportMode?"selected":"")+">"+modes[i]+"</option>";
+        page+="</select><label>Airport size</label><select name='airport_size'>";
+        const char *sizes[]={"Any","Medium + large","Large only"};
+        for(unsigned i=0;i<3;++i) page+="<option value='"+String(i)+"' "+String(i==ui::airportSize?"selected":"")+">"+sizes[i]+"</option>";
+        page+="</select><label><input style='width:auto' type='checkbox' name='airport_labels' "+String(ui::airportLabels?"checked":"")+"> Airport code labels</label>";
+        page+=alertColorInput("airport_color","Airport colour",ui::airportColor);
+        page+="<label>Airport brightness (%)</label><input name='airport_bright' type='number' min='0' max='100' required value='"+String(ui::airportBrightness)+"'><p>Airline airports have scheduled service. Markers appear behind aircraft, with crowded labels hidden. Works with or without the street map. Data: OurAirports.</p>";
     }
     if(capsMaps) page+="<input type='hidden' name='map_setting' value='1'><label><input style='width:auto' type='checkbox' name='map_enabled' "+String(mapWanted?"checked":"")+"> Faint map background</label>";
     page+="<h3>Home Assistant / observing</h3><input type='hidden' name='integration_setting' value='1'>";
@@ -430,6 +443,14 @@ void saveSetup() {
     if(server.hasArg("integration_setting") && (!coordinate(server.arg("pickup_km"),5,1000,newPickup) || floor(newPickup)!=newPickup || (server.hasArg("pickup_arm") && (newFamily.isEmpty() || newArrival.isEmpty() || !server.hasArg("integration_enabled"))))) {
         server.send(400,"text/plain","Pickup needs 5-1000 km, a flight, arrival airport and enabled integration"); return;
     }
+    double airportMode=ui::airportMode,airportSize=ui::airportSize,airportBright=ui::airportBrightness;
+    uint32_t airportColor=ui::airportColor;
+    if(server.hasArg("airport_setting") && (!coordinate(server.arg("airport_mode"),0,2,airportMode) || floor(airportMode)!=airportMode ||
+       !coordinate(server.arg("airport_size"),0,2,airportSize) || floor(airportSize)!=airportSize ||
+       !coordinate(server.arg("airport_bright"),0,100,airportBright) || floor(airportBright)!=airportBright ||
+       !sky::parseAlertColor(server.arg("airport_color").c_str(),airportColor))) {
+        server.send(400,"text/plain","Check airport mode, size, colour and brightness (0-100)"); return;
+    }
     sky::AlertStyle newAlert;
     double ringBrightness,ringWidth,ringPeriod,ringEffect;
     if(!sky::parseAlertColor(server.arg("alert_watch").c_str(),newAlert.watch) ||
@@ -443,6 +464,14 @@ void saveSetup() {
     }
     newAlert.brightness=unsigned(ringBrightness); newAlert.width=unsigned(ringWidth);
     newAlert.periodSeconds=unsigned(ringPeriod); newAlert.effect=sky::AlertEffect(unsigned(ringEffect));
+    if(server.hasArg("airport_setting")) {
+        prefs.putUInt("apt_mode",unsigned(airportMode)); prefs.putUInt("apt_size",unsigned(airportSize)); prefs.putUInt("apt_bright",unsigned(airportBright));
+        prefs.putUInt("apt_color",airportColor); prefs.putBool("apt_labels",server.hasArg("airport_labels"));
+        lvgl_port_lock(-1); ui::airportMode=unsigned(airportMode); ui::airportSize=unsigned(airportSize);
+        ui::airportBrightness=unsigned(airportBright); ui::airportColor=airportColor; ui::airportLabels=server.hasArg("airport_labels"); lvgl_port_unlock();
+    }
+    capsAirportOverlay=false; requestedAirportRange=-1; nextAirports=0;
+    lvgl_port_lock(-1); ui::airportOverlayEnabled=false; ui::airportCount=0; ui::airportRange=-1; lvgl_port_unlock();
     if(server.hasArg("integration_setting")) {
         integrationEnabled=server.hasArg("integration_enabled"); satelliteAlerts=server.hasArg("satellite_alerts"); pickupKm=unsigned(newPickup);
         prefs.putBool("integration",integrationEnabled); prefs.putBool("sat_alerts",satelliteAlerts); prefs.putUInt("pickup_km",pickupKm);
@@ -631,10 +660,13 @@ void discoverInfo() {
     capsSatellites=ok && doc["capabilities"]["satellites"]==true;
     capsWeather=ok && doc["capabilities"]["weather"]==true;
     capsFlights=ok && doc["capabilities"]["flights"]==true;
+    capsAirportOverlay=ok && doc["capabilities"]["airport_overlay"]==true;
     capsAirports=ok && doc["capabilities"]["airports"]==true;
     capsStargazing=ok && doc["capabilities"]["stargazing"]==true;
     capsHighlights=ok && doc["capabilities"]["highlights"]==true;
     lvgl_port_lock(-1);
+    ui::airportOverlayEnabled=capsAirportOverlay;
+    if(!capsAirportOverlay) { ui::airportCount=0; ui::airportRange=-1; requestedAirportRange=-1; }
     ui::stargazingEnabled=capsStargazing; ui::highlightsEnabled=capsHighlights;
     ui::weatherEnabled=capsWeather; ui::flightsEnabled=capsFlights; ui::airportsEnabled=capsAirports;
     if((ui::infoView==1 && !capsWeather) || (ui::infoView==2 && !capsFlights) || (ui::infoView==3 && !capsAirports) || (ui::infoView==4 && !capsStargazing) || (ui::infoView==5 && !capsHighlights)) { ui::infoView=0; ui::infoCount=0; }
@@ -651,6 +683,24 @@ void discoverInfo() {
     lvgl_port_unlock();
     nextCapabilities=millis()+(ok?60000:30000);
     deviceLog.printf("[info] available=%d photos=%d maps=%d stations=%d weather=%d flights=%d airports=%d\n",ok,capsPhotos,capsMaps,capsSatellites,capsWeather,capsFlights,capsAirports);
+}
+void fetchAirports(int rangeIndex) {
+    requestedAirportRange=rangeIndex; nextAirports=millis()+30000;
+    const String path="/v1/airport-overlay?lat="+String(homeLat,6)+"&lon="+String(homeLon,6)+"&range="+String(int(sky::ranges[rangeIndex]))+
+        "&mode="+(ui::airportMode==1?"airline":"all")+"&size="+(ui::airportSize==1?"medium":ui::airportSize==2?"large":"any");
+    JsonDocument doc;
+    if(!infoJSON(path,doc) || !doc["airports"].is<JsonArray>() || doc["airports"].size()>32) return;
+    ui::AirportMarker markers[32]{}; unsigned count=0;
+    for(JsonObjectConst a:doc["airports"].as<JsonArrayConst>()) {
+        const double lat=a["lat"] | NAN,lon=a["lon"] | NAN;
+        if(!std::isfinite(lat) || !std::isfinite(lon) || std::abs(lat)>90 || std::abs(lon)>180) continue;
+        auto &marker=markers[count++]; marker.position=sky::project(lat,lon,homeLat,homeLon);
+        marker.size=std::min(2u,a["size"] | 2u); sky::copyText(marker.code,a["code"]);
+    }
+    lvgl_port_lock(-1);
+    if(ui::model.rangeIndex==rangeIndex) { std::copy(markers,markers+count,ui::airportMarkers); ui::airportCount=count; ui::airportRange=rangeIndex; }
+    lvgl_port_unlock(); nextAirports=millis()+600000;
+    deviceLog.printf("[airports] Loaded %u markers at %d km\n",count,int(sky::ranges[rangeIndex]));
 }
 void fetchMap(int rangeIndex) {
     requestedMapRange=rangeIndex; nextMap=millis()+10000;
@@ -808,6 +858,10 @@ void fetchInfo() {
     if(insight==5) { fetchLogbook(); fetchPhoto(); return; }
     if(routeTarget.length() && (routeTarget!=lastRoute || int32_t(now-nextRoute)>=0)) { fetchRoute(routeTarget); return; }
     if(skyView && capsSatellites && int32_t(now-nextStations)>=0) { fetchStations(); return; }
+    if(radar && capsAirportOverlay && ui::airportMode) {
+        if(requestedAirportRange!=rangeIndex) nextAirports=0;
+        if(int32_t(now-nextAirports)>=0) { fetchAirports(rangeIndex); return; }
+    }
     if(radar && capsMaps && mapWanted) {
         if(requestedMapRange!=rangeIndex) nextMap=now;
         if(int32_t(now-nextMap)>=0) { fetchMap(rangeIndex); return; }
@@ -930,7 +984,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.11.0 / unified navigation and logbook");
+    deviceLog.println("EchoScope 0.12.0 / unified navigation and logbook");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
@@ -941,6 +995,9 @@ void setup() {
     familyFlight=prefs.getString("family_flight",""); familyCallsign=prefs.getString("family_call",""); familyArrival=prefs.getString("family_arr","");
     snprintf(ui::familyNumber,sizeof(ui::familyNumber),"%s",familyFlight.c_str());
     photoBase=prefs.getString("photo_url",""); ui::photosEnabled=false;
+    ui::airportMode=std::min<uint32_t>(2,prefs.getUInt("apt_mode",1)); ui::airportSize=std::min<uint32_t>(2,prefs.getUInt("apt_size",0));
+    ui::airportBrightness=std::min<uint32_t>(100,prefs.getUInt("apt_bright",35)); ui::airportColor=prefs.getUInt("apt_color",0x9BB8CD)&0xFFFFFF;
+    ui::airportLabels=prefs.getBool("apt_labels",true);
     mapWanted=prefs.getBool("map_enabled",true); ui::mapWanted=mapWanted;
     photoPixels=static_cast<lv_color_t*>(heap_caps_malloc(200*150*2,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
     if(!photoPixels) ui::photosEnabled=false;
