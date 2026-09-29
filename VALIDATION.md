@@ -211,3 +211,11 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
 - Docker image built; an isolated read-only container returned the overlay capability and a filtered airport packet over HTTP, including an empty result outside the selected range. Test container stopped afterwards.
 - Native LVGL render inspected with sample London-area airport positions and a synthetic 32-airport crowding case. Assertions cover label on/off, zero brightness, unavailable capability and range mismatch. Markers are rendered before sweep, trails and aircraft. Physical display brightness/legibility still needs checking on the knob.
 - ESP32-S3 release build passed using two compiler jobs after the initial full parallel build exceeded local memory. Application: 1,773,192 bytes; static RAM: 97,716 bytes. Firmware packaged with checksums. No new framebuffer allocation and no device flashing performed.
+
+## Version 0.13.0 — airport list and approach pages
+
+- All 45 info-service tests passed. Added tests for filtering before the nine-airport limit, shared size filtering, empty results, runway endpoint validity/closed-runway rejection, cache reuse and bounded page payloads.
+- Real OurAirports data at test coordinates 51.5, 0 returned LCY, LHR, LGW, STN, SEN, LTN, SOU, BOH and NWI with Airline/Any filters. Gatwick supplied both 08R/26L and 08L/26R endpoint pairs. Packet size: 3,040 bytes.
+- Docker build passed; a read-only test container using that cache served the filtered airport list and Gatwick runway metadata over HTTP. All versus Airline queries returned different lists. Test container stopped afterwards.
+- Native LVGL render checked for airport details, approach radar and stale data. Assertions passed for airport rotation preserving the approach/details page, both side arrows and centre return. Aircraft originate from the home feed; outside/partial coverage is labelled and demo/stale aircraft are suppressed.
+- Final ESP32-S3 build and firmware packaging passed: application 1,777,688 bytes; static RAM 98,828 bytes. No extra framebuffer or aircraft polling added. Device not flashed; physical touch/legibility remains to be checked after updating.

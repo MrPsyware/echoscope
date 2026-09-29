@@ -749,7 +749,7 @@ void fetchInsight(int view) {
     String path;
     if(view==1) path="/v1/weather?lat="+String(homeLat,4)+"&lon="+String(homeLon,4);
     else if(view==2) path="/v1/family?flight="+familyFlight+"&callsign="+familyCallsign+"&arrival="+familyArrival;
-    else if(view==3) path="/v1/airports?lat="+String(homeLat,4)+"&lon="+String(homeLon,4);
+    else if(view==3) path="/v1/airports?lat="+String(homeLat,4)+"&lon="+String(homeLon,4)+"&mode="+(ui::airportMode==2?"all":"airline")+"&size="+(ui::airportSize==1?"medium":ui::airportSize==2?"large":"any");
     else if(view==4) path="/v1/stargazing?lat="+String(homeLat,4)+"&lon="+String(homeLon,4);
     else if(view==5) path="/v1/highlights";
     else return;
@@ -765,8 +765,20 @@ void fetchInsight(int view) {
         ui::infoCount=0;
         if(ok && fresh) for(JsonObjectConst p:doc["pages"].as<JsonArrayConst>()) {
             if(ui::infoCount>=9) break;
-            auto &out=ui::infoPages[ui::infoCount++]; out={};
+            auto &out=ui::infoPages[ui::infoCount++]; out=ui::InfoPage{};
             sky::copyText(out.title,p["title"]); sky::copyText(out.item,p["item"]); out.entryId=p["entry_id"] | uint32_t(0); sky::copyText(out.registration,p["registration"]); unsigned n=0;
+            if(view==3 && p["airport"].is<JsonObjectConst>()) {
+                const double lat=p["airport"]["lat"] | NAN,lon=p["airport"]["lon"] | NAN;
+                if(std::isfinite(lat) && std::isfinite(lon) && std::abs(lat)<=90 && std::abs(lon)<=180) {
+                    auto &airport=out.airport; airport.valid=true; airport.position=sky::project(lat,lon,homeLat,homeLon);
+                    for(JsonObjectConst r:p["airport"]["runways"].as<JsonArrayConst>()) {
+                        if(airport.count>=3) break;
+                        const double a=r["ends"][0] | NAN,b=r["ends"][1] | NAN,c=r["ends"][2] | NAN,d=r["ends"][3] | NAN;
+                        if(!std::isfinite(a)||!std::isfinite(b)||!std::isfinite(c)||!std::isfinite(d)||std::abs(a)>90||std::abs(c)>90||std::abs(b)>180||std::abs(d)>180) continue;
+                        auto &runway=airport.runways[airport.count++]; runway.from=sky::project(a,b,lat,lon); runway.to=sky::project(c,d,lat,lon); sky::copyText(runway.name,r["name"]);
+                    }
+                }
+            }
             if(view==1 && p["layout"]=="weather") {
                 sky::copyText(out.subtitle,p["subtitle"]); sky::copyText(out.note,p["note"]);
                 for(JsonObjectConst c:p["cards"].as<JsonArrayConst>()) {
@@ -781,8 +793,8 @@ void fetchInsight(int view) {
         if(previousItem[0]) { int subpage=0,first=-1; for(unsigned i=0;i<ui::infoCount;++i) if(!strcmp(ui::infoPages[i].item,previousItem)) { if(first<0) first=i; if(subpage++==previousSubpage) { ui::infoPage=i; first=-1; break; } } if(first>=0) ui::infoPage=first; }
         if(ui::infoPage>=int(ui::infoCount)) ui::infoPage=0;
         if(view==5 && ui::infoCount && previousEntry!=ui::infoPages[ui::infoPage].entryId) ui::resetLog(true);
-        if(ui::infoCount) { ui::infoReceived=millis()-uint32_t(std::max(int64_t(0),age))*1000; ui::infoGenerated=generated; sky::copyText(ui::infoSource,doc["source"]); nextInsight=millis()+(view==2?20000:view>=4?60000:900000); }
-        else snprintf(ui::infoMessage,sizeof(ui::infoMessage),"Data unavailable / retrying");
+        if(ui::infoCount) { ui::infoReceived=millis()-uint32_t(std::max(int64_t(0),age))*1000; ui::infoGenerated=generated; sky::copyText(ui::infoSource,doc["source"]); nextInsight=millis()+(view==2?20000:view>=3?60000:900000); }
+        else snprintf(ui::infoMessage,sizeof(ui::infoMessage),view==3 && ok && fresh?"No airports match these filters":"Data unavailable / retrying");
     }
     lvgl_port_unlock();
     deviceLog.printf("[info] page=%d HTTP/JSON=%d fresh=%d\n",view,ok,fresh);
@@ -810,7 +822,7 @@ void fetchLogbook() {
             nextLog=millis()+30000;
             lvgl_port_lock(-1);
             if(ui::infoView==5 && ui::infoCount && ui::infoPages[ui::infoPage].entryId==entry) {
-                ui::logEntry=entry; ui::logReady=true; ui::logPointCount=0; ui::logMapReady=false; ui::logRoute={};
+                ui::logEntry=entry; ui::logReady=true; ui::logPointCount=0; ui::logMapReady=false; ui::logRoute=ui::InfoPage{};
                 unsigned n=0; for(JsonVariantConst line:doc["pages"][0]["lines"].as<JsonArrayConst>()) { if(n>=7) break; sky::copyText(ui::logRoute.lines[n++],line); }
                 ui::logRange=doc["range"] | 100; if(ui::logRange!=5 && ui::logRange!=10 && ui::logRange!=25 && ui::logRange!=50 && ui::logRange!=100) ui::logRange=100;
                 for(JsonArrayConst point:doc["track"].as<JsonArrayConst>()) { if(ui::logPointCount>=192) break; const float east=sky::number(point[0]),north=sky::number(point[1]); if(!std::isfinite(east)||!std::isfinite(north)||fabs(east)>150||fabs(north)>150) continue; const unsigned i=ui::logPointCount++; ui::logPoints[i]={east,north}; ui::logGaps[i]=point[2] | true; }
@@ -984,7 +996,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.12.0 / unified navigation and logbook");
+    deviceLog.println("EchoScope 0.13.0 / unified navigation and logbook");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);

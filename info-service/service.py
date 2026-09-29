@@ -20,7 +20,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError
 from PIL import Image
 
-USER_AGENT = 'EchoScope/0.12.0 (+https://github.com/MrPsyware/echoscope)'
+USER_AGENT = 'EchoScope/0.13.0 (+https://github.com/MrPsyware/echoscope)'
 REG = re.compile(r'[A-Z0-9][A-Z0-9-]{0,14}\Z')
 CACHE = OrderedDict()
 LOCK = threading.Lock()
@@ -212,7 +212,7 @@ class Handler(BaseHTTPRequestHandler):
                 query = parse_qs(urlsplit(self.path).query)
                 if path.endswith('weather') or path.endswith('airports'):
                     lat, lon, query = extras.location(urlsplit(self.path).query)
-                    body = insights.weather(lat, lon, download) if path.endswith('weather') else insights.nearby(lat, lon)
+                    body = insights.weather(lat, lon, download) if path.endswith('weather') else insights.nearby(lat, lon, query.get('mode',['airline'])[0], query.get('size',['any'])[0])
                 elif path.endswith('route'):
                     body = insights.route(query.get('flight', [''])[0], download)
                 else:

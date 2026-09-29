@@ -19,6 +19,7 @@ AIRPORTS = os.environ.get('ENABLE_AIRPORTS', '1') == '1'
 CACHE = OrderedDict()
 LOCK = threading.RLock()
 AIRPORT_INDEX = ()
+RUNWAY_INDEX = {}
 NEXT_FLIGHT = 0.0
 TOKEN = re.compile(r'[A-Z0-9]{2,10}\Z')
 
@@ -234,15 +235,54 @@ def family(flight, callsign, arrival, download):
     return cached(('family', flight, callsign, arrival), 20, build)
 
 
-def nearby(lat, lon):
+def airport_matches(a, mode, size):
+    if mode not in ('airline','all') or size not in ('any','medium','large'):
+        raise ValueError('Invalid airport filter')
+    kind=a.get('type','')
+    return (mode=='all' or a['scheduled']) and (size=='any' or kind=='large_airport' or (size=='medium' and kind=='medium_airport'))
+
+
+def nearby(lat, lon, mode='airline', size='any'):
     airports = AIRPORT_INDEX
     if not airports:
         raise ValueError('Airport index not ready')
-    closest = sorted(airports, key=lambda a: distance(lat, lon, a['lat'], a['lon']))[:5]
-    return result([page(a['iata'] or a['icao'], a['name'], a['town'],
-                        number(distance(lat, lon, a['lat'], a['lon']), ' km from home'),
-                        'Scheduled service' if a['scheduled'] else 'Airfield',
-                        f"{a['lat']:.3f}, {a['lon']:.3f}", 'Not navigation information') for a in closest], 'OurAirports / public domain')
+    closest=sorted((a for a in airports if airport_matches(a,mode,size)),key=lambda a:distance(lat,lon,a['lat'],a['lon']))[:9]
+    pages=[]
+    for a in closest:
+        p=page(a['iata'] or a['icao'],a['name'],a['town'],number(distance(lat,lon,a['lat'],a['lon']),' km from home'),
+               'Scheduled service' if a['scheduled'] else 'Airfield',a.get('type','').replace('_',' ').title(),
+               ('Mapped runways: '+str(len(RUNWAY_INDEX.get(a.get('ident',a['icao']),[])))) if RUNWAY_INDEX.get(a.get('ident',a['icao'])) else 'Runways unavailable')
+        p.update(item=a['icao'],airport={'lat':a['lat'],'lon':a['lon'],'runways':RUNWAY_INDEX.get(a.get('ident',a['icao']),[])[:3]})
+        pages.append(p)
+    return result(pages,'OurAirports')
+
+
+def load_runways(download):
+    global RUNWAY_INDEX
+    path=extras.CACHE_DIR/'runways-index.json'
+    if path.exists():
+        try:
+            data=json.loads(path.read_text())
+            if isinstance(data,dict): RUNWAY_INDEX=data
+            if RUNWAY_INDEX and time.time()-path.stat().st_mtime<86400: return
+        except (ValueError,OSError): pass
+    raw=download('https://davidmegginson.github.io/ourairports-data/runways.csv',16_000_000)
+    rows={}
+    for r in csv.DictReader(io.StringIO(raw.decode('utf-8-sig'))):
+        if r.get('closed')!='0': continue
+        try:
+            ends=[float(r[key]) for key in ('le_latitude_deg','le_longitude_deg','he_latitude_deg','he_longitude_deg')]
+            if not all(math.isfinite(v) for v in ends) or abs(ends[0])>90 or abs(ends[2])>90 or abs(ends[1])>180 or abs(ends[3])>180: continue
+            length=float(r.get('length_ft') or 0)
+            if not math.isfinite(length) or length<=0: continue
+        except (ValueError,KeyError): continue
+        record={'ends':[round(v,6) for v in ends],'name':clean(r.get('le_ident'),5)+'/'+clean(r.get('he_ident'),5),'length':int(length)}
+        group=rows.setdefault(clean(r['airport_ident'],8),[]);group.append(record)
+        group.sort(key=lambda x:x['length'],reverse=True);del group[3:]
+    if not rows: raise ValueError('Empty runway index')
+    path.parent.mkdir(parents=True,exist_ok=True)
+    temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(rows,separators=(',',':')));temporary.replace(path)
+    RUNWAY_INDEX=rows
 
 
 def overlay_ready():
@@ -258,7 +298,7 @@ def airport_overlay(lat, lon, radius, mode='airline', size='any'):
     selected=[]
     for a in AIRPORT_INDEX:
         level=rank.get(a['type'],3)
-        if level>2 or (mode=='airline' and not a['scheduled']) or (size=='medium' and level>1) or (size=='large' and level>0): continue
+        if level>2 or not airport_matches(a,mode,size): continue
         km=distance(lat,lon,a['lat'],a['lon'])
         if km<=radius: selected.append((not a['scheduled'],level,km,a['icao'],a))
     selected.sort(key=lambda row:row[:4])
@@ -275,7 +315,7 @@ def load_airports(download):
             cached_data = json.loads(path.read_text())
             if isinstance(cached_data, list) and len(cached_data) <= 60000:
                 AIRPORT_INDEX = tuple(cached_data)
-            if AIRPORT_INDEX and all('type' in a for a in AIRPORT_INDEX) and time.time() - path.stat().st_mtime < 86400:
+            if AIRPORT_INDEX and all('type' in a and 'ident' in a for a in AIRPORT_INDEX) and time.time() - path.stat().st_mtime < 86400:
                 return
         except (ValueError, OSError):
             pass
@@ -287,7 +327,7 @@ def load_airports(download):
         lat, lon = float(a['latitude_deg']), float(a['longitude_deg'])
         if not math.isfinite(lat) or not math.isfinite(lon) or abs(lat)>90 or abs(lon)>180:
             continue
-        rows.append({'type':a['type'], 'name': clean(a['name'], 48), 'town': clean(a['municipality'], 48), 'lat': lat, 'lon': lon,
+        rows.append({'ident':clean(a['ident'],8), 'type':a['type'], 'name': clean(a['name'], 48), 'town': clean(a['municipality'], 48), 'lat': lat, 'lon': lon,
                      'iata': clean(a['iata_code'], 4), 'icao': clean(a.get('icao_code') or a['gps_code'] or a['ident'], 8),
                      'scheduled': a['scheduled_service'] == 'yes'})
         if len(rows)>60000:
@@ -308,6 +348,7 @@ def start(download):
         while True:
             try:
                 load_airports(download)
+                load_runways(download)
             except (OSError, ValueError, KeyError, TypeError) as error:
                 print('Airport refresh failed: ' + type(error).__name__, flush=True)
             time.sleep(3600)

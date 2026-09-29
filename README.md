@@ -1,8 +1,8 @@
 # EchoScope
 
-**New in 0.12.0:** airport markers on the radar, with airline-service and size
-filters, optional airport-code labels, and configurable colour/brightness. Update
-both firmware and the Docker info server. See [airport overlay](#airport-overlay).
+**New in 0.13.0:** the airport list now shares the overlay's airline/size filters,
+and every airport has a close-up approach radar with actual runway geometry when
+available. Rotate between airports; tap `<` / `>` between details and radar.
 
 
 
@@ -24,7 +24,7 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 - N/E/S/W compass labels and a decorative radar sweep.
 - Local Wi-Fi/location setup, saved settings, stale-data indication and reconnection handling.
 
-Latest firmware: **0.12.0**. Update both firmware and the Docker information server for the enhanced logbook.
+Latest firmware: **0.13.0**. Update both firmware and the Docker information server for the enhanced logbook.
 
 ## Hardware status
 
@@ -260,7 +260,7 @@ Family tracking requests the specific callsign independently of the local radar 
 
 **Weather / clouds** now has three views: next hour, today and the following three days. Icons show clear sky (sun/moon), partial cloud, overcast, rain, snow, thunderstorms or fog. Today includes tonight's mean cloud cover. Daily temperatures are min/max, daily cloud is the mean and daily rain is peak probability; daily wind is the maximum. Next hour uses the next forecast hour after the current model time. Dates/times follow the radar location's timezone, shown on screen. Data refreshes every 15 minutes while viewing the page. These are forecasts, not a measure of astronomical seeing, transparency, moonlight or light pollution.
 
-**Nearby airports** lists the five nearest airports/airfields from the cached OurAirports index. Aircraft-specific routes are on the second **aircraft details** page, not the INFO menu (see below). These features are optional and run through the Docker server. The knob keeps at most nine compact text pages and rejects oversized responses. Information fetching pauses during screen sleep; stale family positions are hidden.
+**Nearby airports** lists the nine nearest airports/airfields matching the overlay airline/size filters from the cached OurAirports index. Aircraft-specific routes are on the second **aircraft details** page, not the INFO menu (see below). These features are optional and run through the Docker server. The knob keeps at most nine compact text pages and rejects oversized responses. Information fetching pauses during screen sleep; stale family positions are hidden.
 
 Sources: [adsb.fi](https://github.com/adsbfi/opendata), [adsbdb](https://www.adsbdb.com/), [Open-Meteo](https://open-meteo.com/) (CC BY 4.0), and [OurAirports](https://ourairports.com/data/) (public domain). The free adsb.fi and Open-Meteo services are intended for personal/non-commercial use under their respective terms.
 
@@ -297,3 +297,29 @@ The server reuses its daily OurAirports cache and automatically upgrades older c
 files to retain size categories. The knob refreshes markers on range changes and
 every ten minutes while viewing the radar; failures retry after 30 seconds.
 No extra API key, image download or framebuffer is needed. Data: OurAirports.
+
+## Airport details and approach radar
+
+Information → Nearby airports uses the same Airline/All and size filters as the
+radar overlay, applied **before** selecting the nearest nine airports. Turning the
+overlay Off hides markers only; the Information list uses Airline airports with the
+saved size filter. This prevents closer private airfields crowding out airports such
+as Gatwick when Airline airports is selected.
+
+Rotate to select an airport; the outer ring shows that selection. Tap `<` or `>` to
+switch between airport details and a **10 km radius**, north-up close-up radar.
+Changing airport preserves the page. Centre tap or mechanical click returns to the
+main radar. The airport list refreshes once per minute while open.
+
+Runway endpoints come from the daily cached OurAirports runway dataset; up to three
+longest open runways with valid endpoints are shown. The longest is labelled with
+its runway numbers. If unavailable, a centre marker replaces the runway geometry.
+No invented runway alignment is drawn.
+
+Aircraft and available trails come from the existing **home-centred feed** (about
+100 km coverage, up to 64 retained aircraft, with the current aircraft-type and
+altitude filters). The main radar's display range does not clip aircraft in this
+close-up; available trail history still depends on the main radar range. This is a
+proximity view, not confirmed arrivals/departures. Coverage edges and stale data are
+labelled; demo aircraft are suppressed. It does not make additional adsb.fi requests.
+Update both firmware and Docker for the new airport metadata and runway cache.

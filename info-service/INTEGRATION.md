@@ -181,3 +181,13 @@ Ranges are 5/10/25/50/100 km; mode is airline/all; size is any/medium/large.
 The response includes at most 32 airports, ordered by scheduled airline service,
 size, then proximity. It is independent of map tiles and MQTT device integration.
 Existing cache files upgrade automatically on the next successful dataset refresh.
+
+## Airport approach pages (0.13.0)
+
+`/v1/airports?lat=51.5&lon=0&mode=airline&size=any` applies the same
+filters as the radar overlay and returns up to nine nearby airport items. Each
+contains geographic coordinates and up to three open runways with valid endpoint
+coordinates, keyed through OurAirports' stable airport identifier. Airport and
+runway indexes refresh daily; the runway cache is `runways-index.json` in `/data`.
+No new service, environment variable or API key is required. Missing runway data
+does not prevent airport details or proximity traffic from displaying.

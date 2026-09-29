@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.0
+
+- Apply shared airline-service/size filters before selecting nine nearby airports, preventing closer private airfields from crowding out commercial airports.
+- Add airport details/approach pages with consistent item ring, rotate-to-airport, side-arrow page switching and centre-to-radar navigation.
+- Show a north-up 10 km approach view with cached actual runway endpoints, nearby fresh aircraft and available trails from the current home feed; label stale/outside/partial coverage.
+- Cache the three longest valid open runways per airport from OurAirports, refreshing daily and automatically upgrading airport identifiers in older caches.
+
 ## 0.12.0
 
 - Add range-aware airport overlay through the info server, defaulting to airports with scheduled airline service.

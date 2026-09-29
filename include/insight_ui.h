@@ -8,7 +8,10 @@ inline bool infoMenu=false,infoNeedsFetch=false;
 inline int infoSelection=0,infoView=0,infoPage=0; // 1 weather, 2 family, 3 airports, 4 stargazing, 5 highlights
 inline char familyNumber[11]{};
 struct WeatherCard { char label[20]{},condition[24]{},temperature[24]{},cloud[24]{},rain[24]{},wind[24]{}; int icon=7; bool night=false; };
-struct InfoPage { char item[48]{}; uint32_t entryId=0; char registration[16]{}; char title[33]{}; char lines[7][61]{}; char subtitle[48]{},note[64]{}; WeatherCard cards[3]{}; unsigned cardCount=0; };
+struct AirportRunway { sky::Point from,to; char name[12]{}; };
+struct AirportDetail { bool valid=false; sky::Point position; AirportRunway runways[3]{}; unsigned count=0; };
+inline int airportPage=0;
+struct InfoPage { AirportDetail airport{}; char item[48]{}; uint32_t entryId=0; char registration[16]{}; char title[33]{}; char lines[7][61]{}; char subtitle[48]{},note[64]{}; WeatherCard cards[3]{}; unsigned cardCount=0; };
 inline InfoPage infoPages[9]{};
 inline unsigned infoCount=0;
 inline uint32_t infoReceived=0,infoGenerated=0;
@@ -67,10 +70,11 @@ inline void pressInfo() {
     infoMenu=false;
     if(infoSelection==0) { satelliteView=true; return; }
     infoNeedsFetch=true;
-    resetLog(); infoView=infoSelection; infoCount=0; infoPage=0; infoReceived=0;
+    airportPage=0; resetLog(); infoView=infoSelection; infoCount=0; infoPage=0; infoReceived=0;
     snprintf(infoMessage,sizeof(infoMessage),"Loading...");
 }
 #include "weather_ui.h"
+#include "approach_ui.h"
 inline void renderInfo(uint32_t now) {
     if(infoMenu) {
         text(65,"INFORMATION",&lv_font_montserrat_24,green);
@@ -94,7 +98,8 @@ inline void renderInfo(uint32_t now) {
     } else {
         if(infoPage>=int(infoCount)) infoPage=0;
         const auto &p=infoPages[infoPage];
-        itemRing(itemIndex(),itemCount()); pageArrows(subpageCount()>1);
+        if(infoView==3 && p.airport.valid && airportPage==1) { renderApproach(p,now); return; }
+        itemRing(itemIndex(),itemCount()); pageArrows(subpageCount()>1 || (infoView==3 && p.airport.valid));
         if(p.cardCount) { renderWeather(p); return; }
         lv_point_t bounds;
         lv_txt_get_size(&bounds,p.title,&lv_font_montserrat_22,0,0,320,LV_TEXT_FLAG_NONE);
@@ -117,7 +122,8 @@ inline void renderInfo(uint32_t now) {
 inline void tapInfo(int x,int y) {
     if(infoView) {
         if(pageSide(x,y)) {
-            if(infoView==5) changeLogPage(pageSide(x,y)); else changeInfoPage(pageSide(x,y));
+            if(infoView==3 && infoCount && infoPages[infoPage].airport.valid) airportPage=1-airportPage;
+            else if(infoView==5) changeLogPage(pageSide(x,y)); else changeInfoPage(pageSide(x,y));
             return;
         }
         pressInfo(); return;

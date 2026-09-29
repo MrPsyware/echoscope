@@ -1,4 +1,4 @@
-# EchoScope interface conventions — 0.12.0
+# EchoScope interface conventions — 0.13.0
 
 - **Rotate = items.** Clockwise advances an aircraft, forecast period, log entry,
   station, airport or information-menu entry. It wraps at either end. Changing items
@@ -55,3 +55,9 @@ squares with a symbolic runway bar and optional airport-code labels use a separa
 configurable colour/brightness. They do not change aircraft hit testing. Crowded
 labels and markers are suppressed; use web setup's Info server section to filter
 scheduled airline airports and airport sizes, or disable the overlay.
+
+Nearby airports uses the overlay's airline/size filters before selecting nine
+nearest entries. Rotate changes airports while keeping details/approach page.
+Side arrows toggle airport details and a north-up 10 km radius radar. The item ring
+always represents airports; centre tap/click returns to main radar. The approach
+page labels its use of the current home feed and coverage limitations.
