@@ -132,6 +132,18 @@ int main() {
     s.aircraft[0].received=UINT32_MAX-999; assert(age(s.aircraft[0],1000)==2);
     Trail t; for(int i=0;i<1000;++i) t.append({float(i),float(i%2)});
     assert(t.count<=trailLength && t.points[0].east==0 && t.points[t.count-1].east==999);
+    Trail climb;
+    climb.append({0,0},1000); climb.append({.1f,0},4000); climb.append({.2f,0},6000); climb.append({.3f,0},16000);
+    assert(climb.count==4); // Do not simplify away altitude colour changes on a straight flight.
+    assert(climb.altitudes[0]==1000 && climb.altitudes[2]==6000);
+    climb.append({.3f,0},NAN); assert(climb.count==5 && std::isnan(climb.altitudes[4]));
+    climb.append({.3f,0},NAN); assert(climb.count==5); // Redraws do not add samples.
+    Trail samples;
+    for(int i=0;i<1000;++i) samples.append({float(i),float(i%2)},float(i*100));
+    for(size_t i=0;i<samples.count;++i) assert(samples.altitudes[i]==samples.points[i].east*100);
+    assert(samples.altitudes[samples.count-1]==99900); // Bounded decimation keeps matching heights.
+    assert(altitudeColor(climb.altitudes[0])!=altitudeColor(climb.altitudes[2]));
+    assert(altitudeColor(NAN)==0x63958E);
     Trail straight; for(int i=0;i<100;++i) straight.append({i*0.01f,0});
     assert(straight.count==2 && straight.points[0].east==0);
     Point a={-20,0},b={20,0}; assert(clipToCircle(a,b,10) && a.east==-10 && b.east==10);

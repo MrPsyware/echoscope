@@ -1,8 +1,8 @@
 # EchoScope
 
-**New in 0.13.0:** the airport list now shares the overlay's airline/size filters,
-and every airport has a close-up approach radar with actual runway geometry when
-available. Rotate between airports; tap `<` / `>` between details and radar.
+**New in 0.13.1:** the highlighted aircraft's trail uses the altitude recorded at
+each point, making climbs and descents visible along its path. The selected aircraft
+remains orange; its trail is thicker and brighter. This update only requires firmware.
 
 
 
@@ -20,11 +20,11 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 - Rotate to zoom or select aircraft; a bare knob press toggles the mode.
 - Bold, brighter footer text shows what rotation controls.
 - Touch an aircraft to see callsign, registration, type, altitude, ground speed, ground track, distance, bearing and position age where available.
-- Faint altitude-coloured flight paths, with the selected path highlighted in amber above other paths.
+- Faint altitude-coloured flight paths, with the selected path showing historical altitude colours, thicker and brighter above other paths.
 - N/E/S/W compass labels and a decorative radar sweep.
 - Local Wi-Fi/location setup, saved settings, stale-data indication and reconnection handling.
 
-Latest firmware: **0.13.0**. Update both firmware and the Docker information server for the enhanced logbook.
+Latest firmware: **0.13.1**. Update both firmware and the Docker information server for the enhanced logbook.
 
 ## Hardware status
 
@@ -171,7 +171,7 @@ Version 0.2.7 samples the mechanical button in a separate task every roughly 5 m
 
 Tap the top radar label to cycle **All → Military → Rotorcraft**. Filtering applies to symbols, trails, hit testing and knob selection. A new feed request refills the nearest 64 matching aircraft; the display can be empty briefly while it arrives. Military is the database flag (`dbFlags & 1`), not an inference from callsign or tracking source. Missing tags do not prove civilian status.
 
-Aircraft use light/large fixed-wing or rotorcraft symbols when classified; unknown classes use a diamond. Classification uses emitter category with a small model-code fallback for common rotorcraft. The independent **M** badge marks military-tagged aircraft. Selected symbols and trails stay orange. Full model descriptions appear on the details screen when supplied.
+Aircraft use light/large fixed-wing or rotorcraft symbols when classified; unknown classes use a diamond. Classification uses emitter category with a small model-code fallback for common rotorcraft. The independent **M** badge marks military-tagged aircraft. Selected symbols stay orange; the highlighted trail shows each point’s recorded altitude. Full model descriptions appear on the details screen when supplied.
 
 The radar radius is 210 pixels. Normal live operation has no persistent status banner; stale/error messages remain and adsb.fi attribution appears on the details screen.
 
@@ -194,7 +194,7 @@ The radar radius is now 210 pixels.
 
 Bare clicks cycle **Range → Aircraft → Altitude → Range**. In altitude mode, rotation cycles All, below 5,000 ft, 5,000–14,999 ft, 15,000–29,999 ft, 30,000 ft and above, and unknown altitude. The selected band remains active when changing rotation mode. Filtering happens before the 64-aircraft capacity limit. Range, aircraft-class and altitude filters combine.
 
-Aircraft and their trails use green below 5,000 ft, cyan below 15,000 ft, blue below 30,000 ft and purple above; unknown altitude is muted. The selected aircraft and trail remain orange. Stale unselected symbols are muted. Altitude is reported barometric altitude, falling back to geometric altitude when unavailable.
+Aircraft and their trails use green below 5,000 ft, cyan below 15,000 ft, blue below 30,000 ft and purple above; unknown altitude is muted. The selected aircraft stays orange. Its brighter, thicker trail uses each recorded point’s altitude; other trails use their aircraft’s current altitude. Stale unselected symbols are muted. Altitude is reported barometric altitude, falling back to geometric altitude when unavailable.
 
 Hold for five seconds and open the displayed setup address to configure:
 
@@ -323,3 +323,9 @@ close-up; available trail history still depends on the main radar range. This is
 proximity view, not confirmed arrivals/departures. Coverage edges and stale data are
 labelled; demo aircraft are suppressed. It does not make additional adsb.fi requests.
 Update both firmware and Docker for the new airport metadata and runway cache.
+
+Highlighted-trail altitude history is recorded locally during observation. Straight-line
+simplification preserves colour-band transitions; long histories remain bounded to
+192 points and older position/height samples are thinned together. Unknown heights
+use muted grey-green. This adds 48 KiB of PSRAM across the 64 trail slots, with no
+extra network requests. Saved logbook tracks are unchanged.

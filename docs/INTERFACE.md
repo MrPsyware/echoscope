@@ -1,4 +1,4 @@
-# EchoScope interface conventions — 0.13.0
+# EchoScope interface conventions — 0.13.1
 
 - **Rotate = items.** Clockwise advances an aircraft, forecast period, log entry,
   station, airport or information-menu entry. It wraps at either end. Changing items
@@ -61,3 +61,9 @@ nearest entries. Rotate changes airports while keeping details/approach page.
 Side arrows toggle airport details and a north-up 10 km radius radar. The item ring
 always represents airports; centre tap/click returns to main radar. The approach
 page labels its use of the current home feed and coverage limitations.
+
+The highlighted live aircraft retains its orange symbol and label. Its trail is
+thicker/brighter than other trails and uses recorded altitude at each segment's
+newer endpoint: green <5,000 ft, cyan 5,000–14,999 ft, blue 15,000–29,999 ft,
+purple ≥30,000 ft; unknown altitude is muted. Trail points and heights are retained
+and thinned together. The saved spotting log's track display is unchanged.

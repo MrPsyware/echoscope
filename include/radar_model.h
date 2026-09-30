@@ -89,25 +89,28 @@ inline float age(const Aircraft &a,uint32_t now) { return a.positionAge + uint32
 struct Trail {
     char hex[12]{};
     std::array<Point,trailLength> points{};
+    std::array<float,trailLength> altitudes{};
     size_t count=0;
     void clear() { hex[0]=0; count=0; }
-    void append(Point p) {
-        if(count && distance({p.east-points[count-1].east,p.north-points[count-1].north})<0.01f) return;
+    void append(Point p,float altitude=NAN) {
+        if(count && distance({p.east-points[count-1].east,p.north-points[count-1].north})<0.01f && altitudeBand(altitude)==altitudeBand(altitudes[count-1])) { altitudes[count-1]=altitude; return; }
         if(count>=2) {
             const Point start=points[count-2],mid=points[count-1];
             const Point segment={p.east-start.east,p.north-start.north};
             const float length=distance(segment);
             const float deviation=length>0?std::abs(segment.east*(mid.north-start.north)-segment.north*(mid.east-start.east))/length:1;
             const float forward=(p.east-mid.east)*(mid.east-start.east)+(p.north-mid.north)*(mid.north-start.north);
-            if(length<2 && forward>=0 && deviation<0.02f) { points[count-1]=p; return; }
+            if(length<2 && forward>=0 && deviation<0.02f && altitudeBand(altitude)==altitudeBand(altitudes[count-1]) && altitudeBand(altitude)==altitudeBand(altitudes[count-2])) {
+                points[count-1]=p; altitudes[count-1]=altitude; return;
+            }
         }
         if(count==trailLength) {
             // Keep the start and sample the whole path more coarsely, rather
             // than dropping the start of a long encounter.
-            for(size_t i=0;i<trailLength/2;++i) points[i]=points[i*2];
+            for(size_t i=0;i<trailLength/2;++i) { points[i]=points[i*2]; altitudes[i]=altitudes[i*2]; }
             count=trailLength/2;
         }
-        points[count++]=p;
+        points[count]=p; altitudes[count++]=altitude;
     }
 };
 struct Model {
@@ -171,7 +174,7 @@ struct Model {
             Trail *t=nullptr;
             for(size_t j=0;j<maxAircraft;++j) if(!std::strcmp(trails[j].hex,data.aircraft[i].hex)) { t=&trails[j]; break; }
             if(!t) for(size_t j=0;j<maxAircraft;++j) if(!trails[j].hex[0]) { t=&trails[j]; std::strcpy(t->hex,data.aircraft[i].hex); break; }
-            if(t) t->append(data.aircraft[i].position);
+            if(t) t->append(data.aircraft[i].position,data.aircraft[i].altitude);
         }
     }
     void refresh(uint32_t now) { normaliseSelection(now); updateTrails(now); }

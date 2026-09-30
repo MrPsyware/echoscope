@@ -219,3 +219,9 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
 - Docker build passed; a read-only test container using that cache served the filtered airport list and Gatwick runway metadata over HTTP. All versus Airline queries returned different lists. Test container stopped afterwards.
 - Native LVGL render checked for airport details, approach radar and stale data. Assertions passed for airport rotation preserving the approach/details page, both side arrows and centre return. Aircraft originate from the home feed; outside/partial coverage is labelled and demo/stale aircraft are suppressed.
 - Final ESP32-S3 build and firmware packaging passed: application 1,777,688 bytes; static RAM 98,828 bytes. No extra framebuffer or aircraft polling added. Device not flashed; physical touch/legibility remains to be checked after updating.
+
+## Version 0.13.1 — historical altitude trail colours
+
+- Host model, JSON, photo and network-tool tests passed. New checks cover altitude-band transitions on straight tracks, unknown altitude, repeated same-position frames, aligned position/height history thinning and colour lookup.
+- Native LVGL preview inspected using a sample climb from 1,000 to 40,000 ft. The selected trail progresses through green/cyan/blue/purple while the aircraft/label remain orange. Recorded start/end altitude assertions passed.
+- ESP32-S3 build and packaging passed: application 1,777,868 bytes; static RAM 98,828 bytes. Per-aircraft trail heights add 49,152 bytes (48 KiB) to the existing PSRAM history allocation. No device flashing performed.

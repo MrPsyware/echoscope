@@ -291,7 +291,7 @@ inline void render(uint32_t now) {
             auto from=trail->points[j-1],to=trail->points[j];
             if(!sky::clipToCircle(from,to,model.range())) continue;
             auto p=screen(from),q=screen(to);
-            line(p.x,p.y,q.x,q.y,selected?amber:sky::altitudeColor(a.altitude),selected?2:1,selected?140:45);
+            line(p.x,p.y,q.x,q.y,sky::altitudeColor(selected?trail->altitudes[j]:a.altitude),selected?2:1,selected?180:45);
         }
     }
     size_t visible=0;

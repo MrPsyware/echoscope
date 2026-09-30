@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.1
+
+- Colour highlighted live aircraft trails from each point's recorded altitude, preserving the orange aircraft marker and brighter/thicker selection styling.
+- Preserve altitude-colour transitions during straight-line simplification and keep height samples aligned during bounded history thinning.
+- Add 48 KiB of PSRAM trail history; no additional network requests or Docker update required.
+
 ## 0.13.0
 
 - Apply shared airline-service/size filters before selecting nine nearby airports, preventing closer private airfields from crowding out commercial airports.
