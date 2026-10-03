@@ -247,3 +247,11 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
 - All 53 server tests passed, including full-history search, literal wildcard handling, SQL metacharacters, escaping, combined category/date filters, pagination and invalid input. Root/legacy routes and token-protected cache POST/redirect tested.
 - Production Docker build and isolated Compose logbook smoke test passed with 1,000 synthetic encounters; the temporary volume was removed.
 - Inspected headless Chromium renders at 1280 px and 390 px using labelled sample aircraft. Mobile navigation stacks and the table scrolls within its container. No live user database was modified.
+
+## ESP32-C3 Mini prototype
+
+- Hardware identification confirmed ESP32-C3 revision 0.4 / 4 MB flash. Original full flash backed up and SHA-256 recorded locally. Hardware test uploaded and user confirmed button gestures; encoder calibrated to two transitions per notch with reversed sign.
+- Mini host tests passed for input timing/bounce/wrap, five-second setup threshold, free versus held rotation, incremental framing, escaped/nested strings, all truncation points, invalid/duplicate arrays, oversized objects, nearest-32 selection and geographic date-line handling. A public live adsb.fi response at fixture coordinates decoded successfully.
+- Existing ESP32-S3 host regression tests passed. Mini radar, details and setup layouts rendered natively and visually inspected at 240×240.
+- Mini build: 1,255,584 bytes application / 1,966,080-byte slot; 53,220 bytes static RAM. Uses a 7,680-byte DMA strip buffer, no PSRAM. Separate four-megabyte partition layout includes two application slots, NVS and a core-dump partition; OTA upload is not implemented.
+- Uploaded to the C3 with flash hashes verified. Initial setup AP ran with about 145,000 bytes free heap (roughly 142 KiB), largest block 114,676 bytes. End-to-end feed/TLS memory testing on the knob awaits the user's Wi-Fi/location setup. No saved credentials are checked in or logged. The main ESP32-S3 firmware is unchanged.

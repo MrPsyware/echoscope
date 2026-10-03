@@ -1,5 +1,12 @@
 # Changelog
 
+## EchoScope Mini prototype (separate ESP32-C3 target)
+
+- Add standalone 240×240 radar, nearest-32 aircraft details, verified direct HTTPS feed, Wi-Fi/location portal, brightness and sleep settings. No Docker dependency.
+- Reuse tested two-transition encoder calibration and independent button sampling; single/double/held rotation and five-second setup hold replace touch navigation.
+- Stream aircraft objects with bounded buffers and preserve last good data on decode failures. Add Mini-specific build/upload/test targets and CI.
+- This is experimental hardware support, not an update to the established ESP32-S3 release.
+
 ## Server maintenance after 0.14.0
 
 - Make the server root a responsive dark logbook dashboard with project information, totals, full-history search, category/date filters and 50-entry pagination. Keep existing sighting URLs and add compact token-protected photo-cache controls with a return to the dashboard.

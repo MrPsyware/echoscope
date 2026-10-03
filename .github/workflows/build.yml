@@ -43,3 +43,26 @@ jobs:
       - name: Remove isolated test storage
         if: always()
         run: docker compose -p echoscope-ci -f info-service/compose.yaml down -v
+
+  mini:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .tools/platformio
+            hardware/c3-mini/.pio/libdeps
+          key: mini-${{ runner.os }}-${{ hashFiles('hardware/c3-mini/platformio.ini', 'requirements-build.txt') }}
+      - run: make mini-test
+      - run: make mini-build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: echoscope-mini-prototype
+          path: |
+            hardware/c3-mini/.pio/build/c3-mini/firmware.bin
+            hardware/c3-mini/.pio/build/c3-mini/bootloader.bin
+            hardware/c3-mini/.pio/build/c3-mini/partitions.bin

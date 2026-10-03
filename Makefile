@@ -17,13 +17,16 @@ export PLATFORMIO_CORE_DIR
 export PLATFORMIO_SETTING_ENABLE_TELEMETRY := false
 export PIP_DISABLE_PIP_VERSION_CHECK := 1
 
-.PHONY: help setup deps build test firmware upload flash flash-full monitor ports backup clean docker docker-down docker-logs docker-db-check
+.PHONY: help setup deps build test firmware upload flash flash-full monitor ports backup clean docker docker-down docker-logs docker-db-check mini-build mini-upload mini-test
 help:
 	@printf '%s\n' \
 	  'EchoScope build commands:' \
 	  '  make setup       Create a local Python environment and install pinned tools' \
 	  '  make deps        Download the board toolchain and libraries' \
 	  '  make build       Compile the ESP32-S3 firmware' \
+	  '  make mini-build  Build the standalone ESP32-C3 Mini prototype' \
+	  '  make mini-upload Upload Mini over USB (PORT=/dev/ttyACM0)' \
+	  '  make mini-test   Run Mini streaming-feed and gesture tests' \
 	  '  make test        Run host model/input and JSON tests' \
 	  '  make firmware    Build app/merged images and checksums in dist/' \
 	  '  make upload      Build and flash app only (preserves existing settings)' \
@@ -94,3 +97,15 @@ docker-logs:
 
 docker-db-check:
 	$(DOCKER) compose $(DOCKER_ENV) -f info-service/compose.yaml exec -T photos python db_check.py
+
+mini-build: setup
+	"$(PY)" -m platformio run -d hardware/c3-mini -e c3-mini -j 2
+mini-upload: mini-build
+	"$(PY)" -m platformio run -d hardware/c3-mini -e c3-mini -t upload --upload-port "$(PORT)"
+mini-test: setup
+	"$(PY)" -m platformio pkg install -d hardware/c3-mini -e c3-mini
+	@mkdir -p .tools/tests
+	$(CXX) -std=c++17 hardware/c3-test/input_test.cpp -o .tools/tests/mini-input
+	.tools/tests/mini-input
+	$(CXX) -std=c++17 -I hardware/c3-mini/.pio/libdeps/c3-mini/ArduinoJson/src hardware/c3-mini/tests/feed_test.cpp -o .tools/tests/mini-feed
+	.tools/tests/mini-feed
