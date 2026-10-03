@@ -1,5 +1,11 @@
 # Changelog
 
+## Server maintenance after 0.14.0
+
+- Return an explicit HTTP 503 for logbook database errors instead of dropping the response.
+- Log SQLite extended error names/codes in web, background and startup failures.
+- Add `make docker-db-check` for read-only integrity/storage diagnostics and document preservation before repair. No database reset or firmware update.
+
 ## 0.14.0
 
 - Keep airport code labels underneath aircraft instead of hiding them near traffic.

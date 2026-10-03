@@ -1,5 +1,7 @@
 """EchoScope LAN information server with bounded, attributed thumbnail caching."""
 import html
+import sqlite3
+import logging
 import os
 import extras
 import insights
@@ -139,6 +141,16 @@ class Handler(BaseHTTPRequestHandler):
         return self.reply(200,b'Photo cache cleared. Photos will be downloaded again when viewed.','text/plain')
 
     def do_GET(self):
+        try:
+            return self.get_response()
+        except sqlite3.Error as error:
+            logging.getLogger('echoscope.storage').error(
+                'Logbook database failure: %s (%s): %s',
+                getattr(error,'sqlite_errorname','unknown'),
+                getattr(error,'sqlite_errorcode','unknown'),error)
+            return self.reply(503,b'Logbook database temporarily unavailable. Check server logs and run make docker-db-check on the Docker server. Existing history has not been reset.','text/plain; charset=utf-8')
+
+    def get_response(self):
         path = urlsplit(self.path).path
         if path == '/cache':
             body='<meta name="viewport" content="width=device-width"><h1>Photo cache</h1><p>Thumbnails are cached for one week, up to 256 photos. Clearing photos preserves maps, orbital data and your logbook.</p><form method="post" action="/cache/clear"><input type="hidden" name="token" value="'+CACHE_TOKEN+'"><button>Clear photo cache</button></form>'

@@ -199,3 +199,33 @@ Firmware uses the selected airport's latitude/longitude for its 20 km approach
 map. Update the server alongside firmware to enable this map; older servers still
 provide airport details, but reject the new radius. No additional capability or
 configuration is needed. Maps are requested on demand and retain attribution.
+
+## Logbook database errors
+
+A SQLite `disk I/O error` does not by itself establish corruption. Inspect the
+extended error name/code in server logs and check the volume's filesystem, mount,
+permissions and free space. Do not delete the database or its journal/WAL files.
+The logbook returns HTTP 503 on database errors; it never silently resets history.
+
+After updating/rebuilding the information server, run `make docker-db-check`.
+This opens `/data/sightings.sqlite3` read-only, reports storage metadata and runs
+`PRAGMA integrity_check`. It does not create or repair a database. An `ok` result
+only covers the fresh connection's reads, not write permissions or the existing
+service connection. If that passes, restarting the service can clear a failed
+long-lived connection; repeat the check and inspect logs if the issue recurs.
+
+Before any repair, stop the service and copy the whole data directory (including
+any SQLite sidecars) from the stopped container into a new backup directory:
+
+```sh
+docker compose -f info-service/compose.yaml stop photos
+mkdir -p .backups
+backup_dir=".backups/echoscope-data-$(date +%Y%m%d-%H%M%S)"
+docker compose -f info-service/compose.yaml cp photos:/data "$backup_dir"
+docker compose -f info-service/compose.yaml start photos
+```
+
+If copying fails, retain the originals and investigate the mount. Do not run
+`docker compose down -v`. Repair should work on a separate copy after identifying
+the error; a read-only check can also fail when a hot journal needs recovery,
+which is not proof that database contents are corrupt.

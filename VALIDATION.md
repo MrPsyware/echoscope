@@ -233,3 +233,8 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
 - ESP32-S3 build and packaging passed: application 1,779,080 bytes; static RAM 99,140 bytes. Airport maps reuse the existing framebuffer and are requested only for the visible airport. No additional aircraft polling was added.
 - Both firmware and server must update for 20 km map support. The view continues using the home aircraft feed and labels partial/outside coverage; it is not an independent receiver at the airport.
 - No device was flashed. Physical brightness, footer touch and the airport-centred live map still need checking on the knob.
+
+## Server database diagnostics
+
+- All 49 server tests passed. New checks cover valid/missing/invalid database files without modifying them, extended error reporting and HTTP 503 across all six logbook routes, including semaphore release.
+- This addresses error handling and diagnosis, not a confirmed storage root cause. The user's Docker volume has not been accessed or repaired.

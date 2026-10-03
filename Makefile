@@ -17,7 +17,7 @@ export PLATFORMIO_CORE_DIR
 export PLATFORMIO_SETTING_ENABLE_TELEMETRY := false
 export PIP_DISABLE_PIP_VERSION_CHECK := 1
 
-.PHONY: help setup deps build test firmware upload flash flash-full monitor ports backup clean docker docker-down docker-logs
+.PHONY: help setup deps build test firmware upload flash flash-full monitor ports backup clean docker docker-down docker-logs docker-db-check
 help:
 	@printf '%s\n' \
 	  'EchoScope build commands:' \
@@ -35,6 +35,7 @@ help:
 	  '  make backup      Save a timestamped 16 MB backup under .backups/' \
 	  '  make docker      Build/start the info server on 0.0.0.0:8086' \
 	  '  make docker-down Stop the info server' \
+	  '  make docker-db-check Check logbook storage without modifying history' \
 	  '  make docker-logs Follow info server logs' \
 	  '  make clean       Remove build products, retaining tools and backups' \
 	  'Override serial device with PORT=/dev/ttyACM1; monitor baud with BAUD=115200.'
@@ -90,3 +91,6 @@ docker-down:
 	$(DOCKER) compose $(DOCKER_ENV) -f info-service/compose.yaml down
 docker-logs:
 	$(DOCKER) compose $(DOCKER_ENV) -f info-service/compose.yaml logs -f
+
+docker-db-check:
+	$(DOCKER) compose $(DOCKER_ENV) -f info-service/compose.yaml exec -T photos python db_check.py

@@ -182,7 +182,9 @@ class Bridge:
                         self.work(state)
                         if insights.FLIGHTS: self.store.capture_route(self.download)
                     except (OSError,ValueError,KeyError,TypeError) as error: LOG.warning('Background information unavailable: %s',type(error).__name__)
-            except (OSError,ValueError,KeyError,TypeError,sqlite3.Error) as error:
+            except sqlite3.Error as error:
+                LOG.error('Logbook database failure: %s (%s): %s',getattr(error,'sqlite_errorname','unknown'),getattr(error,'sqlite_errorcode','unknown'),error)
+            except (OSError,ValueError,KeyError,TypeError) as error:
                 self.publish('availability','offline',True); LOG.warning('Device polling unavailable: %s',type(error).__name__)
             time.sleep(5)
 
@@ -198,5 +200,7 @@ def start(download):
         device=Device(os.environ['ECHOSCOPE_URL'],os.environ.get('ECHOSCOPE_TOKEN',''))
         STORE=Store(); BRIDGE=Bridge(device,STORE,download)
         threading.Thread(target=BRIDGE.run,daemon=True).start()
-    except (ValueError,OSError,sqlite3.Error) as error:
+    except sqlite3.Error as error:
+        LOG.error('Integration database unavailable: %s (%s): %s',getattr(error,'sqlite_errorname','unknown'),getattr(error,'sqlite_errorcode','unknown'),error)
+    except (ValueError,OSError) as error:
         LOG.error('Integration disabled: %s',type(error).__name__)
