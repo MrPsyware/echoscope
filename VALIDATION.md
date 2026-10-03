@@ -241,3 +241,9 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
 - Packaging follow-up: added the diagnostic script to `.dockerignore`'s allowlist after the first server build exposed its omission. Full Docker build now passes; the built image successfully ran `db_check.check` against an isolated temporary database as uid 65534 with a read-only root and no network/existing volumes.
 
 - Reproduced the logbook's disk I/O failure in the old read-only container with 1,000 synthetic encounters and 8 KiB tracks. The same query rendered all 500 page entries under the updated production Compose settings, using a separate temporary project/volume. Added this check to CI and removed the local test volume afterwards. Existing database data is unchanged; only ephemeral `/tmp` storage is added.
+
+## Logbook dashboard
+
+- All 53 server tests passed, including full-history search, literal wildcard handling, SQL metacharacters, escaping, combined category/date filters, pagination and invalid input. Root/legacy routes and token-protected cache POST/redirect tested.
+- Production Docker build and isolated Compose logbook smoke test passed with 1,000 synthetic encounters; the temporary volume was removed.
+- Inspected headless Chromium renders at 1280 px and 390 px using labelled sample aircraft. Mobile navigation stacks and the table scrolls within its container. No live user database was modified.

@@ -2,6 +2,8 @@
 
 ## Server maintenance after 0.14.0
 
+- Make the server root a responsive dark logbook dashboard with project information, totals, full-history search, category/date filters and 50-entry pagination. Keep existing sighting URLs and add compact token-protected photo-cache controls with a return to the dashboard.
+
 - Provide writable, bounded `/tmp` storage for SQLite sorts in the read-only container, fixing `SQLITE_IOERR_GETTEMPPATH` on larger logbooks. Add a Compose regression check with 1,000 synthetic encounters.
 
 - Return an explicit HTTP 503 for logbook database errors instead of dropping the response.

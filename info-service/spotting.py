@@ -147,13 +147,6 @@ class Store:
                             f"Closest {r['closest']:.1f} km",'First '+insights.clock(r['first']),'Last '+insights.clock(r['last']))
             p.update({'entry_id':r['id'],'registration':r['registration'],'item':str(r['id'])}); pages.append(p)
         return insights.result(pages or [insights.page('LOGBOOK','No interesting sightings recorded yet','Watchlist / military / helicopters','Recorded while device feed is awake')],'EchoScope logbook / UTC')
-    def web(self,offset=0):
-        # Paged full history, at most 500 rows per response.
-        with self.lock:
-            rows=[dict(r) for r in self.db.execute('SELECT * FROM entries ORDER BY last DESC LIMIT 500 OFFSET ?',(offset,))]
-        fields=['day','registration','callsign','type','reason','closest','first','last']
-        out='<meta name="viewport" content="width=device-width"><title>EchoScope sightings</title><h1>Spotting log</h1><p>30 days, up to 10,000 encounters. Times UTC; closest observed distance. Watchlist, military and helicopters in the received feed.</p><table><tr>'+''.join('<th>'+x+'</th>' for x in fields)+'</tr>'
-        for row in rows:
-            row['closest']=f"{row['closest']:.1f} km"; row['first']=insights.clock(row['first']); row['last']=insights.clock(row['last'])
-            out+='<tr>'+''.join('<td>'+('<a href="/sighting/'+str(row['id'])+'">'+html.escape(str(row[k]))+'</a>' if k in ('day','registration') else html.escape(str(row[k])))+'</td>' for k in fields)+'</tr>'
-        return out+'</table>'+ (f'<a href="?offset={offset+500}">Older sightings</a>' if len(rows)==500 else '')
+    def web(self,offset=0,**filters):
+        import dashboard
+        return dashboard.page(self,offset=offset,**filters)

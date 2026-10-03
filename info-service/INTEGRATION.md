@@ -236,3 +236,14 @@ directory. The Compose service now supplies a 64 MiB `/tmp` tmpfs and sets
 with `git pull` and `make docker` to recreate the container with that mount. This
 fix preserves the named data volume. Larger logbook sorts can need temporary
 files even when the database integrity check and small queries succeed.
+
+## Logbook website
+
+Open the server root (for example `http://192.168.2.89:8086/`) for the dark
+logbook dashboard. `/sightings` remains an alias. Search registration, callsign,
+aircraft type or hex across all retained encounters; combine it with category
+and UTC date filters. Results show 50 entries per page and preserve filters
+when paging. Click an aircraft to open its existing photo, route and trace view.
+The collapsible photo-cache section clears only photos and returns to the site.
+The site uses local styles and server-rendered forms, without a JavaScript or
+external font dependency. No firmware update or database migration is required.

@@ -8,6 +8,7 @@ import insights
 import observing
 import integration
 import photo_cache
+import dashboard
 import secrets
 import io
 import json
@@ -138,7 +139,10 @@ class Handler(BaseHTTPRequestHandler):
         if not secrets.compare_digest(token,CACHE_TOKEN): return self.reply(403,b'Reload cache controls','text/plain')
         with LOCK:
             photo_cache.clear(); CACHE.clear()
-        return self.reply(200,b'Photo cache cleared. Photos will be downloaded again when viewed.','text/plain')
+        self.send_response(303)
+        self.send_header('Location','/?cache=cleared#cache')
+        self.send_header('Content-Length','0')
+        self.end_headers()
 
     def do_GET(self):
         try:
@@ -152,8 +156,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def get_response(self):
         path = urlsplit(self.path).path
-        if path == '/cache':
-            body='<meta name="viewport" content="width=device-width"><h1>Photo cache</h1><p>Thumbnails are cached for one week, up to 256 photos. Clearing photos preserves maps, orbital data and your logbook.</p><form method="post" action="/cache/clear"><input type="hidden" name="token" value="'+CACHE_TOKEN+'"><button>Clear photo cache</button></form>'
+        if path in ('/','/sightings','/cache'):
+            from urllib.parse import parse_qs
+            query=parse_qs(urlsplit(self.path).query)
+            try:
+                render=integration.STORE.web if integration.STORE is not None else lambda **kwargs: dashboard.page(None,**kwargs)
+                body=render(offset=int(query.get('offset',['0'])[0]),
+                    q=query.get('q',[''])[0],reason=query.get('reason',[''])[0],day=query.get('day',[''])[0],
+                    token=CACHE_TOKEN,notice='Photo cache cleared. Photos will download again when viewed.' if query.get('cache')==['cleared'] else '')
+            except ValueError: return self.reply(400,b'Invalid logbook filter','text/plain')
             return self.reply(200,body.encode(),'text/html; charset=utf-8')
         if path == '/health':
             body = {'service': 'echoscope-photos', 'name': 'EchoScope Info Server', 'protocol': 1,
@@ -184,12 +195,6 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,KeyError): return self.reply(404,b'Log entry unavailable','text/plain')
             except (OSError,TypeError): return self.reply(502,b'Log entry temporarily unavailable','text/plain')
             finally: GATE.release()
-        if path == '/sightings':
-            if integration.STORE is None: return self.reply(404,b'Configure device integration first','text/plain')
-            from urllib.parse import parse_qs
-            try: offset=max(0,min(10000,int(parse_qs(urlsplit(self.path).query).get('offset',['0'])[0])))
-            except ValueError: return self.reply(400,b'Invalid offset','text/plain')
-            return self.reply(200,integration.STORE.web(offset).encode(),'text/html; charset=utf-8')
         if path == '/v1/highlights':
             if not integration.ready(): return self.reply(404,b'Device integration unavailable','text/plain')
             return self.reply(200,json.dumps(integration.STORE.highlights()).encode(),'application/json')
@@ -252,8 +257,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(400, b'Invalid query or unavailable data', 'text/plain')
             finally:
                 GATE.release()
-        if path == '/':
-            return self.reply(200, b'<h1>EchoScope Info Server</h1><p>Photos, maps, station predictions, weather and flight information. Weather: <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0). Flights: <a href="https://adsb.fi/">adsb.fi</a> and <a href="https://www.adsbdb.com/">adsbdb</a>. Airports: <a href="https://ourairports.com/data/">OurAirports</a>. Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>. Orbits: CelesTrak / SGP4.</p><p><a href="/sightings">Spotting history</a> / <a href="/cache">Photo cache controls</a>. Service ready. Set this server URL in EchoScope setup.</p><p>Photo credits and original links: /photo/REGISTRATION</p>', 'text/html; charset=utf-8')
         png=path.startswith("/image/")
         binary = path.startswith('/v1/photo/')
         if not binary and not png and not path.startswith('/photo/'):
