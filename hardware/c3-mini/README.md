@@ -49,7 +49,33 @@ small layouts, not downscaled versions of the large knob.
 - Display uses a 7,680-byte strip buffer. JSON framing uses bounded object and
   envelope buffers (6 KiB / 2 KiB); never accumulates the full body. HTTPClient
   handles chunked transfer decoding. Maximum response 1 MiB, bounded read timeout.
-- No live trails/watchlists/photos/maps/server extras in this first prototype.
+- Recent trails retain up to 32 moving positions for each retained aircraft
+  (12,932 bytes total), in RAM only. Departed aircraft release their history;
+  gaps over 30 seconds start a new trail. Trail segments keep their recorded
+  altitude colour; the selected aircraft has a brighter trail and orange icon.
+- Watchlists match exact type codes, registrations or flight callsigns, ignoring
+  case. Separate entries with spaces or commas, up to 95 characters per field.
+  For an A380, use **A388**. A match among the nearest 32 aircraft pulses a green
+  outer ring while its position is fresh; ring brightness is configurable, with
+  0 disabling the ring. Details identify watched aircraft. Alerts do not run
+  while sleeping or in setup, because those modes pause polling.
+- Airport markers need no server. The default list contains 17 UK airports
+  classified as large with scheduled service by [OurAirports](https://ourairports.com/data/),
+  retrieved 2026-10-04 (public-domain data). Codes and subdued square icons sit
+  behind planes and trails. Only airports within the selected range are shown.
+- Web setup offers Off / Built-in UK / Custom airports. A custom list replaces
+  the default list; switch back to Built-in UK to restore it. Up to 32 unique
+  airport codes (2–8 letters/digits), with decimal **longitude/latitude**, e.g.:
+
+  ```text
+  LGW: -0.185739/51.148744
+  LHR: -0.459909/51.470748
+  ```
+
+  One airport per line. Invalid/duplicate/out-of-bounds entries reject the save
+  without replacing the existing configuration. Watchlists, airport settings
+  and the trail display toggle persist alongside the existing display settings.
+- No photos, map tiles or info-server extras in this standalone prototype.
 - Wi-Fi and TLS memory are measured in serial logs. Idle hardware-test memory
   must not be treated as available memory for this networked application.
 
@@ -80,3 +106,13 @@ This prototype has no factory Wi-Fi credentials and uses its own `echo-mini`
 preferences namespace. The setup hotspot has a random per-boot password. The
 configuration page is intended for a trusted home network and protects saves
 with a form token. No saved password is included in the page or serial logs.
+
+## Resource check (2026-10-04)
+
+This build occupies 1,280,436 / 1,966,080 application bytes (65.1%); static RAM
+is 68,036 bytes. A short live run with 2–3 aircraft completed seven verified
+HTTPS requests successfully. Free heap settled near 139,020 bytes between
+requests, with a minimum of 68,472 bytes during TLS; steady radar drawing took
+75–76 ms within the 200 ms frame period. This is a light-traffic measurement,
+not a full-capacity endurance test. Trails use fixed storage regardless of
+how long the Mini is running.

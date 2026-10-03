@@ -109,3 +109,5 @@ mini-test: setup
 	.tools/tests/mini-input
 	$(CXX) -std=c++17 -I hardware/c3-mini/.pio/libdeps/c3-mini/ArduinoJson/src hardware/c3-mini/tests/feed_test.cpp -o .tools/tests/mini-feed
 	.tools/tests/mini-feed
+	$(CXX) -std=c++17 hardware/c3-mini/tests/features_test.cpp -o .tools/tests/mini-features
+	.tools/tests/mini-features

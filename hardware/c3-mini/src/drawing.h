@@ -11,8 +11,7 @@ const uint8_t glyphs[][5]={
 uint16_t rgb(uint8_t r,uint8_t g,uint8_t b) {uint16_t c=((r>>3)<<11)|((g>>2)<<5)|(b>>3);return (c>>8)|(c<<8);}
 void dot(int x,int y,uint16_t color) {if(x>=0&&x<W&&y>=stripY&&y<stripY+stripHeight&&y<H)pixels[(y-stripY)*W+x]=color;}
 void rect(int x,int y,int w,int h,uint16_t c){for(int yy=max(y,stripY);yy<min(y+h,stripY+stripHeight);++yy)for(int xx=max(0,x);xx<min(W,x+w);++xx)dot(xx,yy,c);}
-void text(int y,const char *s,uint16_t color,int scale=1) {
-    int x=(W-int(strlen(s))*6*scale)/2;
+void textAt(int x,int y,const char *s,uint16_t color,int scale=1) {
     for(;*s;++s,x+=6*scale){
         char ch=char(toupper(static_cast<unsigned char>(*s)));
         int n=ch>='0'&&ch<='9'?ch-'0':ch>='A'&&ch<='Z'?ch-'A'+10:-1;
@@ -22,7 +21,9 @@ void text(int y,const char *s,uint16_t color,int scale=1) {
     }
 }
 
+void text(int y,const char *s,uint16_t color,int scale=1){textAt((W-int(strlen(s))*6*scale)/2,y,s,color,scale);}
 void line(int x,int y,int xx,int yy,uint16_t color){
+    if(max(y,yy)<stripY||min(y,yy)>=stripY+stripHeight)return;
     int dx=abs(xx-x),sx=x<xx?1:-1,dy=-abs(yy-y),sy=y<yy?1:-1,err=dx+dy;
     for(;;){dot(x,y,color);if(x==xx&&y==yy)break;int e=2*err;if(e>=dy){err+=dy;x+=sx;}if(e<=dx){err+=dx;y+=sy;}}
 }
