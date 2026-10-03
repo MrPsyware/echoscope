@@ -239,3 +239,5 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
 - All 49 server tests passed. New checks cover valid/missing/invalid database files without modifying them, extended error reporting and HTTP 503 across all six logbook routes, including semaphore release.
 - This addresses error handling and diagnosis, not a confirmed storage root cause. The user's Docker volume has not been accessed or repaired.
 - Packaging follow-up: added the diagnostic script to `.dockerignore`'s allowlist after the first server build exposed its omission. Full Docker build now passes; the built image successfully ran `db_check.check` against an isolated temporary database as uid 65534 with a read-only root and no network/existing volumes.
+
+- Reproduced the logbook's disk I/O failure in the old read-only container with 1,000 synthetic encounters and 8 KiB tracks. The same query rendered all 500 page entries under the updated production Compose settings, using a separate temporary project/volume. Added this check to CI and removed the local test volume afterwards. Existing database data is unchanged; only ephemeral `/tmp` storage is added.

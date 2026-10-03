@@ -6,9 +6,13 @@ services:
       - "0.0.0.0:${INFO_PORT:-${PHOTO_PORT:-8086}}:8086"
     restart: unless-stopped
     read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777,noexec,nosuid,nodev
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     environment:
+      SQLITE_TMPDIR: /tmp
+      TMPDIR: /tmp
       ECHOSCOPE_URL: ${ECHOSCOPE_URL:-}
       ECHOSCOPE_TOKEN: ${ECHOSCOPE_TOKEN:-}
       MQTT_HOST: ${MQTT_HOST:-}

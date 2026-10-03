@@ -229,3 +229,10 @@ If copying fails, retain the originals and investigate the mount. Do not run
 `docker compose down -v`. Repair should work on a separate copy after identifying
 the error; a read-only check can also fail when a hot journal needs recovery,
 which is not proof that database contents are corrupt.
+
+`SQLITE_IOERR_GETTEMPPATH (6410)` means SQLite cannot find a writable temporary
+directory. The Compose service now supplies a 64 MiB `/tmp` tmpfs and sets
+`SQLITE_TMPDIR`/`TMPDIR` to it, while retaining a read-only root filesystem. Update
+with `git pull` and `make docker` to recreate the container with that mount. This
+fix preserves the named data volume. Larger logbook sorts can need temporary
+files even when the database integrity check and small queries succeed.

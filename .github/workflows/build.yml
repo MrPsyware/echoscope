@@ -38,3 +38,8 @@ jobs:
       - run: python -m unittest discover -v
         working-directory: info-service
       - run: docker build -t echoscope-photos:test info-service
+      - name: Exercise logbook sorting with production container restrictions
+        run: docker compose -p echoscope-ci -f info-service/compose.yaml run --build --rm -T --no-deps photos python - < tests/docker_logbook.py
+      - name: Remove isolated test storage
+        if: always()
+        run: docker compose -p echoscope-ci -f info-service/compose.yaml down -v
