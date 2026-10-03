@@ -191,3 +191,11 @@ coordinates, keyed through OurAirports' stable airport identifier. Airport and
 runway indexes refresh daily; the runway cache is `runways-index.json` in `/data`.
 No new service, environment variable or API key is required. Missing runway data
 does not prevent airport details or proximity traffic from displaying.
+
+## Airport map radius (0.14.0)
+
+`/v1/map` accepts `range=20` in addition to 5, 10, 25, 50 and 100 km.
+Firmware uses the selected airport's latitude/longitude for its 20 km approach
+map. Update the server alongside firmware to enable this map; older servers still
+provide airport details, but reject the new radius. No additional capability or
+configuration is needed. Maps are requested on demand and retain attribution.

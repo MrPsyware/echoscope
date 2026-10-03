@@ -1,6 +1,7 @@
 import io
 import json
 import math
+import time
 from pathlib import Path
 import tempfile
 import unittest
@@ -33,6 +34,15 @@ class Extras(unittest.TestCase):
             download = Mock(return_value=raw.getvalue())
             extras.tile(4, 5, 6, download); extras.tile(4, 5, 6, download)
             self.assertEqual(download.call_count, 1)
+
+    def test_airport_twenty_km_map(self):
+        lat,lon=51.148,-0.19
+        p,l,mask=extras.inverse_grid(lat,lon,20)
+        self.assertAlmostEqual((p[0,210]-math.radians(lat))*6371.0088,20)
+        self.assertAlmostEqual(math.degrees(p[210,210]),lat)
+        self.assertAlmostEqual(math.degrees(l[210,210]),lon)
+        with patch.object(extras,'MAP_CACHE',{(lat,lon,20):(time.time()+60,200,b'airport-map')}):
+            self.assertEqual(extras.map_response(lat,lon,20,None),(200,b'airport-map'))
 
     def test_query_validation(self):
         for query in ['lat=nan&lon=0', 'lat=86&lon=0', 'lat=0&lon=181']:

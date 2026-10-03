@@ -24,7 +24,7 @@ inline void renderLog(uint32_t now) {
         else text(220,"No saved track for this entry",&lv_font_montserrat_16,muted);
         text(58,p.title,&lv_font_montserrat_20,white); text(89,"OBSERVED TRACK / N UP",&lv_font_montserrat_14,green);
         text(357,"Green: start / orange: last seen",&lv_font_montserrat_12,white);
-        text(382,logMapReady?mapCredit:"Radar grid / map unavailable",&lv_font_montserrat_12,white,65,336);
+        if(logMapReady) drawMapAttribution(382); else text(382,"Radar grid / map unavailable",&lv_font_montserrat_12,muted,65,336);
         char label[64]; snprintf(label,sizeof(label),"%d km / %u recorded points",logRange,logPointCount); text(407,label,&lv_font_montserrat_14,muted);
     } else if(logPage==1) {
         text(58,p.title,&lv_font_montserrat_24,white); text(98,"FLIGHT ROUTE",&lv_font_montserrat_18,green);

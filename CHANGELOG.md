@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0
+
+- Keep airport code labels underneath aircraft instead of hiding them near traffic.
+- Hide radar controls after 30 seconds; mode clicks and bottom touches reveal and operate them immediately.
+- Expand airport approach radar to the main radar size and a 20 km radius, with shared aircraft symbols, trails, sweep and optional airport-centred map.
+- Keep map attribution visible in muted green, including with hidden controls.
+- Add 20 km map support to the information server; update Docker alongside firmware. Reuse the existing map framebuffer.
+
 ## 0.13.1
 
 - Colour highlighted live aircraft trails from each point's recorded altitude, preserving the orange aircraft marker and brighter/thicker selection styling.

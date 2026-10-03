@@ -1,10 +1,9 @@
 # EchoScope
 
-**New in 0.13.1:** the highlighted aircraft's trail uses the altitude recorded at
-each point, making climbs and descents visible along its path. The selected aircraft
-remains orange; its trail is thicker and brighter. This update only requires firmware.
-
-
+**New in 0.14.0:** airport approach radar now fills the display with a 20 km radius,
+optional map and matching aircraft symbols. The radar controls hide after 30 seconds;
+press or touch the bottom to reveal and use them. Airport labels remain beneath aircraft.
+Update both firmware and the Docker information server for 20 km maps.
 
 *A miniature radar station for the aircraft overhead.*
 
@@ -24,7 +23,7 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 - N/E/S/W compass labels and a decorative radar sweep.
 - Local Wi-Fi/location setup, saved settings, stale-data indication and reconnection handling.
 
-Latest firmware: **0.13.1**. Update both firmware and the Docker information server for the enhanced logbook.
+Latest firmware: **0.14.0**. Update both firmware and the Docker information server for the enhanced logbook.
 
 ## Hardware status
 

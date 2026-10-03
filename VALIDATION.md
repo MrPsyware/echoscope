@@ -225,3 +225,11 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
 - Host model, JSON, photo and network-tool tests passed. New checks cover altitude-band transitions on straight tracks, unknown altitude, repeated same-position frames, aligned position/height history thinning and colour lookup.
 - Native LVGL preview inspected using a sample climb from 1,000 to 40,000 ft. The selected trail progresses through green/cyan/blue/purple while the aircraft/label remain orange. Recorded start/end altitude assertions passed.
 - ESP32-S3 build and packaging passed: application 1,777,868 bytes; static RAM 98,828 bytes. Per-aircraft trail heights add 49,152 bytes (48 KiB) to the existing PSRAM history allocation. No device flashing performed.
+
+## Version 0.14.0 — unobstructed radar and 20 km airport maps
+
+- Host model, JSON, photo and network-tool tests passed; all 46 information-service tests passed. Added timer expiry, visible/hidden rotation and millis rollover checks, plus 20 km map projection/cache acceptance.
+- Native LVGL assertions passed for unchanged airport labels with nearby aircraft, label enable/disable, hidden footer touch acting immediately, airport page retention, side arrows/centre return and rejection of maps for a different airport. Inspected the expanded radar with a synthetic circular map fixture; compass labels are clear of navigation arrows.
+- ESP32-S3 build and packaging passed: application 1,779,080 bytes; static RAM 99,140 bytes. Airport maps reuse the existing framebuffer and are requested only for the visible airport. No additional aircraft polling was added.
+- Both firmware and server must update for 20 km map support. The view continues using the home aircraft feed and labels partial/outside coverage; it is not an independent receiver at the airport.
+- No device was flashed. Physical brightness, footer touch and the airport-centred live map still need checking on the knob.

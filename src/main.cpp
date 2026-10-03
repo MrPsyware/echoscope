@@ -50,7 +50,8 @@ bool capsWeather=false,capsFlights=false,capsAirports=false,capsStargazing=false
 uint32_t nextCapabilities=0,nextMap=0,nextStations=0;
 int requestedMapRange=-1,requestedAirportRange=-1;
 bool capsAirportOverlay=false;
-uint32_t nextAirports=0;
+uint32_t nextAirports=0,nextApproachMap=0;
+String requestedApproach;
 
 double homeLat=0,homeLon=0;
 bool configured=false,portal=false,apActive=false;
@@ -100,6 +101,7 @@ void applyBrightness() {
 }
 bool wakeForInput(uint32_t now,bool touch=false) {
     if(!ui::activity.interact(now,touch)) return false;
+    ui::radarControls.show(now);
     ui::asleep=false; ui::input=sky::InputGate{};
     if(!board->getLCD()->setDisplayOnOff(true)) deviceLog.println("[power] Display wake command failed");
     applyBrightness();
@@ -117,6 +119,7 @@ void controls(lv_timer_t *) {
     if(steps && wakeForInput(now)) { steps=0; remainder=0; }
     remainder+=steps;
     if(std::abs(remainder)>=transitionsPerDetent) {
+        if(!ui::model.details && !ui::infoView && !ui::infoMenu && !ui::satelliteView && !ui::settings) ui::radarControls.rotate(now);
         const int previousBand=ui::model.altitudeFilter; const auto previousType=ui::model.filter;
         if(!ui::settings && !ui::pageAnimating) { if(ui::infoMenu || ui::infoView) ui::rotateInfo(remainder/transitionsPerDetent); else if(ui::satelliteView) ui::rotateStations(remainder/transitionsPerDetent); else ui::model.rotate((ui::model.details || ui::model.selectMode || ui::model.altitudeMode || ui::model.typeMode)?-remainder/transitionsPerDetent:remainder/transitionsPerDetent,now); }
         if(previousBand!=ui::model.altitudeFilter || previousType!=ui::model.filter) ui::requestFeed=true;
@@ -142,7 +145,7 @@ void controls(lv_timer_t *) {
         else if(ui::infoMenu || ui::infoView) ui::pressInfo();
         else if(ui::satelliteView) ui::satelliteView=false;
         else if(ui::routePage) { ui::routePage=false; ui::model.details=false; }
-        else ui::model.press(now);
+        else { ui::radarControls.show(now); ui::model.press(now); }
         deviceLog.printf("[input] Click accepted; rotation=%s\n",ui::model.typeMode?"type":ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
     }
     if(ui::pickupArmed && uint32_t(now-ui::pickupStarted)>=86400000u) ui::pickupArmed=false;
@@ -503,10 +506,11 @@ void saveSetup() {
     ui::activity.lastActivity=millis(); applyBrightness();
     lvgl_port_unlock();
     photoBase=newPhoto; prefs.putString("photo_url",photoBase); photoAttempt[0]=0; photoRetryAt=0; nextCapabilities=0; nextMap=0; nextStations=0; requestedMapRange=-1;
+    requestedApproach="";
     capsPhotos=capsMaps=capsSatellites=false;
     if(server.hasArg("map_setting")) mapWanted=server.hasArg("map_enabled");
     prefs.putBool("map_enabled",mapWanted);
-    lvgl_port_lock(-1); ui::mapWanted=mapWanted; ui::photosEnabled=false; ui::mapsEnabled=false; ui::satellitesEnabled=false; ui::satelliteView=false; ui::mapReady=false; ui::photoReady=false; lvgl_port_unlock();
+    lvgl_port_lock(-1); ui::approachMapReady=false; ui::mapWanted=mapWanted; ui::photosEnabled=false; ui::mapsEnabled=false; ui::satellitesEnabled=false; ui::satelliteView=false; ui::mapReady=false; ui::photoReady=false; lvgl_port_unlock();
     ssid=newSSID; password=newPassword; homeLat=lat; homeLon=lon; configured=true;
     prefs.putString("ssid",ssid); prefs.putString("pass",password); prefs.putDouble("lat",lat); prefs.putDouble("lon",lon); prefs.putBool("set",true);
     server.send(200,"text/html","<meta name='viewport' content='width=device-width'><h1>Settings saved</h1><p>The knob is connecting. If it cannot connect, setup remains available. Press the knob to view the radar.</p>");
@@ -676,7 +680,7 @@ void discoverInfo() {
     if(!ui::infoAvailable()) ui::infoMenu=false;
     if(ui::infoMenu) ui::ensureInfoSelection();
     if(!capsPhotos) { ui::photoReady=false; photoAttempt[0]=0; }
-    if(!capsMaps) { ui::mapReady=false; requestedMapRange=-1; }
+    if(!capsMaps) { ui::mapReady=false; requestedMapRange=-1; ui::approachMapReady=false; requestedApproach=""; }
     if(!capsSatellites) { ui::satelliteView=false; ui::stationCount=0; }
     const char *credit=doc["map_credit"] | "Copyright OpenStreetMap contributors";
     snprintf(ui::mapCredit,sizeof(ui::mapCredit),"%s",credit);
@@ -716,6 +720,7 @@ void fetchMap(int rangeIndex) {
                 memcpy(mapPixels,body.text.c_str()+8,sky::mapBytes-8);
                 ui::mapImage.header.cf=LV_IMG_CF_TRUE_COLOR; ui::mapImage.header.w=420; ui::mapImage.header.h=420;
                 ui::mapImage.data_size=sky::mapBytes-8; ui::mapImage.data=reinterpret_cast<const uint8_t*>(mapPixels);
+                ui::approachMapReady=false; requestedApproach=""; ui::logMapReady=false;
                 ui::mapReady=true; ui::mapRange=rangeIndex; nextMap=millis()+604800000;
             }
             lvgl_port_unlock();
@@ -723,6 +728,29 @@ void fetchMap(int rangeIndex) {
     }
     http.end();
     deviceLog.printf("[info] map range=%d HTTP=%d\n",int(sky::ranges[rangeIndex]),code);
+}
+void fetchApproachMap(const String &airport,double lat,double lon) {
+    requestedApproach=airport; nextApproachMap=millis()+10000;
+    NetworkClient client; HTTPClient http; http.setConnectTimeout(1500); http.setTimeout(4000); http.useHTTP10(true);
+    const String path="/v1/map?lat="+String(lat,6)+"&lon="+String(lon,6)+"&range=20";
+    http.begin(client,photoBase+path); const int code=http.GET();
+    if(code==200 && http.getSize()==int(sky::mapBytes)) {
+        auto body=readFeedBody(http,sky::mapBytes,5000);
+        if(body.complete && sky::validMap(body.text.c_str(),body.text.length())) {
+            lvgl_port_lock(-1);
+            if(ui::infoView==3 && ui::airportPage==1 && ui::infoCount && airport==ui::infoPages[ui::infoPage].item && !ui::asleep.load()) {
+                lv_img_cache_invalidate_src(&ui::mapImage); lv_img_cache_invalidate_src(&ui::logMapImage); lv_img_cache_invalidate_src(&ui::approachMapImage);
+                memcpy(mapPixels,body.text.c_str()+8,sky::mapBytes-8);
+                ui::mapReady=false; requestedMapRange=-1; ui::logMapReady=false;
+                ui::approachMapImage.header.cf=LV_IMG_CF_TRUE_COLOR; ui::approachMapImage.header.w=420; ui::approachMapImage.header.h=420;
+                ui::approachMapImage.data_size=sky::mapBytes-8; ui::approachMapImage.data=reinterpret_cast<const uint8_t*>(mapPixels);
+                snprintf(ui::approachMapAirport,sizeof(ui::approachMapAirport),"%s",airport.c_str());
+                ui::approachMapReady=true; nextApproachMap=millis()+604800000;
+            }
+            lvgl_port_unlock();
+        }
+    }
+    http.end(); deviceLog.printf("[info] airport map %s HTTP=%d\n",airport.c_str(),code);
 }
 void fetchStations() {
     nextStations=millis()+10000;
@@ -770,7 +798,7 @@ void fetchInsight(int view) {
             if(view==3 && p["airport"].is<JsonObjectConst>()) {
                 const double lat=p["airport"]["lat"] | NAN,lon=p["airport"]["lon"] | NAN;
                 if(std::isfinite(lat) && std::isfinite(lon) && std::abs(lat)<=90 && std::abs(lon)<=180) {
-                    auto &airport=out.airport; airport.valid=true; airport.position=sky::project(lat,lon,homeLat,homeLon);
+                    auto &airport=out.airport; airport.valid=true; airport.lat=lat; airport.lon=lon; airport.position=sky::project(lat,lon,homeLat,homeLon);
                     for(JsonObjectConst r:p["airport"]["runways"].as<JsonArrayConst>()) {
                         if(airport.count>=3) break;
                         const double a=r["ends"][0] | NAN,b=r["ends"][1] | NAN,c=r["ends"][2] | NAN,d=r["ends"][3] | NAN;
@@ -841,7 +869,7 @@ void fetchLogbook() {
                 lvgl_port_lock(-1);
                 if(ui::infoView==5 && ui::logEntry==entry) {
                     lv_img_cache_invalidate_src(&ui::mapImage); lv_img_cache_invalidate_src(&ui::logMapImage);
-                    memcpy(mapPixels,body.text.c_str()+8,sky::mapBytes-8); ui::mapReady=false; requestedMapRange=-1;
+                    memcpy(mapPixels,body.text.c_str()+8,sky::mapBytes-8); ui::mapReady=false; requestedMapRange=-1; ui::approachMapReady=false; requestedApproach="";
                     ui::logMapImage.header.cf=LV_IMG_CF_TRUE_COLOR; ui::logMapImage.header.w=420; ui::logMapImage.header.h=420;
                     ui::logMapImage.data_size=sky::mapBytes-8; ui::logMapImage.data=reinterpret_cast<uint8_t*>(mapPixels); ui::logMapReady=true; nextLogMap=millis()+600000;
                 }
@@ -862,11 +890,19 @@ void fetchInfo() {
     const String routeTarget=ui::model.details && !ui::settings && ui::flightsEnabled?String(routeAircraft?routeAircraft->callsign:ui::detailCall):String("");
     const bool needsInfo=ui::infoNeedsFetch; ui::infoNeedsFetch=false;
     const int rangeIndex=ui::model.rangeIndex;
+    String approach; double approachLat=0,approachLon=0;
+    if(insight==3 && ui::airportPage==1 && ui::infoCount && ui::infoPages[ui::infoPage].airport.valid) {
+        const auto &p=ui::infoPages[ui::infoPage]; approach=p.item; approachLat=p.airport.lat; approachLon=p.airport.lon;
+    }
     lvgl_port_unlock();
     if(insight) {
         if(needsInfo || lastInsight!=insight) { nextInsight=0; lastInsight=insight; }
         if(int32_t(now-nextInsight)>=0) { fetchInsight(insight); return; }
     } else lastInsight=0;
+    if(approach.length() && capsMaps && mapWanted) {
+        if(requestedApproach!=approach) nextApproachMap=0;
+        if(int32_t(now-nextApproachMap)>=0) { fetchApproachMap(approach,approachLat,approachLon); return; }
+    }
     if(insight==5) { fetchLogbook(); fetchPhoto(); return; }
     if(routeTarget.length() && (routeTarget!=lastRoute || int32_t(now-nextRoute)>=0)) { fetchRoute(routeTarget); return; }
     if(skyView && capsSatellites && int32_t(now-nextStations)>=0) { fetchStations(); return; }
@@ -996,7 +1032,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.13.1 / unified navigation and logbook");
+    deviceLog.println("EchoScope 0.14.0 / unified navigation and logbook");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);

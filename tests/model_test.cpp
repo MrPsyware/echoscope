@@ -93,6 +93,10 @@ int main() {
     assert(!watchPower.updateWatch(61000) && watchPower.sleeping);
     watchPower.observeWatch(false,62000); watchPower.observeWatch(true,63000);
     assert(watchPower.updateWatch(63000) && watchPower.autoAwake);
+    RadarControls bar; assert(bar.visible(0) && bar.visible(29999) && !bar.visible(30000));
+    bar.rotate(31000); assert(!bar.visible(31000)); // Hidden rotation still controls the radar without revealing the bar.
+    bar.show(32000); bar.rotate(40000); assert(bar.visible(69999) && !bar.visible(70000));
+    bar.show(UINT32_MAX-1000); assert(bar.visible(1000) && !bar.visible(30000));
     Activity power; power.sleepAfterMs=0; assert(!power.tick(86400000));
     power.sleepAfterMs=60000; power.interact(100); assert(!power.tick(60099) && power.tick(60100));
     Model alerts; alerts.demo=false; alerts.watches.types.set("A380");

@@ -16,6 +16,7 @@ inline sky::Model model;
 inline uint32_t navigationNow=0;
 inline sky::InputGate input;
 inline sky::Activity activity;
+inline sky::RadarControls radarControls;
 inline sky::AlertStyle alertStyle;
 inline bool photosEnabled=false,photoReady=false;
 inline char photoReg[16]{},photoCredit[128]{},photoLink[256]{},photoStatus[48]="Loading photo...";
@@ -51,6 +52,7 @@ inline void text(int y,const char *s,const lv_font_t *font=&lv_font_montserrat_1
 inline lv_point_t screen(sky::Point p) {
     return {lv_coord_t(centre+p.east/model.range()*radius),lv_coord_t(centre-p.north/model.range()*radius)};
 }
+#include "radar_visuals.h"
 #include "airport_ui.h"
 #include "navigation.h"
 #include "insight_ui.h"
@@ -300,37 +302,11 @@ inline void render(uint32_t now) {
         if(!model.visible(a,now)) continue;
         ++visible;
         const bool selected=!std::strcmp(a.hex,model.selected);
-        const uint32_t color=selected?amber:sky::age(a,now)>20?muted:sky::altitudeColor(a.altitude);
-        auto p=screen(a.position);
-        // Heading-oriented line silhouettes; a diamond means unknown class.
-        const float heading=std::isfinite(a.track)?a.track*sky::pi/180:0;
-        auto segment=[&](float x,float y,float x2,float y2) {
-            auto px=[&](float xx,float yy){return p.x+int(xx*std::cos(heading)-yy*std::sin(heading));};
-            auto py=[&](float xx,float yy){return p.y+int(xx*std::sin(heading)+yy*std::cos(heading));};
-            line(px(x,y),py(x,y),px(x2,y2),py(x2,y2),color,2);
-        };
-        if(a.kind==sky::AircraftKind::Rotorcraft) {
-            segment(0,-6,0,10); segment(-9,-3,9,-3); segment(-4,9,4,9);
-            circle(p.x,p.y,3,color);
-        } else if(a.kind!=sky::AircraftKind::Unknown) {
-            const int span=a.kind==sky::AircraftKind::Large?11:7;
-            segment(0,-10,0,10); segment(-span,3,0,-2); segment(0,-2,span,3);
-            segment(-4,8,4,8);
-        } else {
-            segment(0,-7,5,0); segment(5,0,0,7); segment(0,7,-5,0); segment(-5,0,0,-7);
-        }
-        if(sky::watched(a,model.watches)) circle(p.x,p.y,11,alertStyle.color(sky::alertKind(a,model.watches)),2);
-        if(a.military) text(p.y-19,"M",&lv_font_montserrat_14,color,p.x+9,16);
-        if(selected) {
-            circle(p.x,p.y,15,amber);
-            const int tx=std::max(20,std::min(310,int(p.x)-65));
-            const int ty=p.y>centre?p.y-34:p.y+18;
-            text(ty,a.callsign[0]?a.callsign:a.hex,&lv_font_montserrat_14,amber,tx,136);
-        }
+        drawAircraft(a,screen(a.position),selected,now);
     }
     if(model.demo) text(84,"DEMO",&lv_font_montserrat_14,muted);
-    if(drawMap) text(383,mapCredit,&lv_font_montserrat_12,white,58,350);
-    footer(visible);
+    if(drawMap) drawMapAttribution(radarControls.visible(now)?383:401);
+    if(radarControls.visible(now)) footer(visible);
     const auto alert=model.activeAlert(now);
     const uint8_t opacity=alertStyle.opacity(now);
     if(alert!=sky::AlertKind::None && opacity) circle(centre,centre,229,alertStyle.color(alert),alertStyle.width,false,opacity);
@@ -348,6 +324,7 @@ inline void tap(int x,int y,uint32_t now) {
         routePage=false; model.details=false; model.refresh(now); return;
     }
     if(y>=395) {
+        radarControls.show(now);
         const auto previous=model.filter; const int band=model.altitudeFilter;
         model.tapMode(std::max(0,std::min(3,(x-73)/80)),now);
         if(previous!=model.filter || band!=model.altitudeFilter) requestFeed=true;

@@ -117,7 +117,7 @@ def make_map(lat, lon, radius, download):
 
 
 def map_response(lat, lon, radius, download):
-    if radius not in (5, 10, 25, 50, 100):
+    if radius not in (5, 10, 20, 25, 50, 100):
         raise ValueError('Invalid radar range')
     key = (round(lat, 6), round(lon, 6), radius)
     with MAP_LOCK:

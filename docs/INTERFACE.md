@@ -1,4 +1,4 @@
-# EchoScope interface conventions — 0.13.1
+# EchoScope interface conventions — 0.14.0
 
 - **Rotate = items.** Clockwise advances an aircraft, forecast period, log entry,
   station, airport or information-menu entry. It wraps at either end. Changing items
@@ -53,12 +53,12 @@ Explicit remote screen-off suppresses watch wake until a successful no-match fee
 Airport markers are a passive layer behind aircraft and trails. Small outlined
 squares with a symbolic runway bar and optional airport-code labels use a separate
 configurable colour/brightness. They do not change aircraft hit testing. Crowded
-labels and markers are suppressed; use web setup's Info server section to filter
+labels and markers are suppressed against other airports, never against aircraft; use web setup's Info server section to filter
 scheduled airline airports and airport sizes, or disable the overlay.
 
 Nearby airports uses the overlay's airline/size filters before selecting nine
 nearest entries. Rotate changes airports while keeping details/approach page.
-Side arrows toggle airport details and a north-up 10 km radius radar. The item ring
+Side arrows toggle airport details and a north-up 20 km radius radar. The item ring
 always represents airports; centre tap/click returns to main radar. The approach
 page labels its use of the current home feed and coverage limitations.
 
@@ -67,3 +67,14 @@ thicker/brighter than other trails and uses recorded altitude at each segment's
 newer endpoint: green <5,000 ft, cyan 5,000–14,999 ft, blue 15,000–29,999 ft,
 purple ≥30,000 ft; unknown altitude is muted. Trail points and heights are retained
 and thinned together. The saved spotting log's track display is unchanged.
+
+Radar bottom controls hide after 30 seconds without control interaction. A mode
+click or bottom touch reveals the controls and performs the normal action on the
+same input. Rotation extends the timer while visible; hidden rotation keeps
+operating the selected mode without revealing the bar. Waking reveals it too.
+
+Approach radar uses the main radar's full 210-pixel radius, aircraft symbols,
+altitude colours, trails and sweep. An optional airport-centred 20 km map is fetched
+only for the displayed airport, reusing the main/logbook map buffer. Runways, title,
+coverage text and navigation remain overlaid. Map attribution remains visible in
+muted green on every map view, including when radar controls are hidden.

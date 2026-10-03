@@ -6,6 +6,13 @@ inline bool setupExpired(uint32_t now,uint32_t opened) {
     return static_cast<int32_t>(now-opened)>=300000;
 }
 
+struct RadarControls {
+    uint32_t lastInput=0;
+    bool visible(uint32_t now) const { return uint32_t(now-lastInput)<30000; }
+    void show(uint32_t now) { lastInput=now; }
+    void rotate(uint32_t now) { if(visible(now)) show(now); }
+};
+
 struct Activity {
     static constexpr uint32_t filterTimeout=10000, sleepTimeout=3600000;
     uint32_t lastActivity=0,lastTouch=0, sleepAfterMs=sleepTimeout;

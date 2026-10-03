@@ -9,7 +9,7 @@ inline int infoSelection=0,infoView=0,infoPage=0; // 1 weather, 2 family, 3 airp
 inline char familyNumber[11]{};
 struct WeatherCard { char label[20]{},condition[24]{},temperature[24]{},cloud[24]{},rain[24]{},wind[24]{}; int icon=7; bool night=false; };
 struct AirportRunway { sky::Point from,to; char name[12]{}; };
-struct AirportDetail { bool valid=false; sky::Point position; AirportRunway runways[3]{}; unsigned count=0; };
+struct AirportDetail { bool valid=false; double lat=0,lon=0; sky::Point position; AirportRunway runways[3]{}; unsigned count=0; };
 inline int airportPage=0;
 struct InfoPage { AirportDetail airport{}; char item[48]{}; uint32_t entryId=0; char registration[16]{}; char title[33]{}; char lines[7][61]{}; char subtitle[48]{},note[64]{}; WeatherCard cards[3]{}; unsigned cardCount=0; };
 inline InfoPage infoPages[9]{};
