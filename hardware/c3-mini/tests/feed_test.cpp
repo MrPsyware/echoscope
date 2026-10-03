@@ -8,6 +8,10 @@ bool decode(mini::Decoder &d,const std::string &s){for(char c:s)if(!d.put(c))ret
 int main(int argc,char **argv){
     const std::string a=R"({"hex":"abc123","flight":"TEST1  ","lat":51.5,"lon":0.01,"seen_pos":1,"alt_baro":12000,"gs":180,"track":90,"nav_modes":["autopilot"],"r":"G-TEST","t":"A320"})";
     mini::Decoder good(51.5,0,2);assert(decode(good,"{\"now\":123,\"ac\":["+a+"],\"msg\":\"No error\"}"));assert(good.snapshot.count==1);assert(!strcmp(good.snapshot.aircraft[0].call,"TEST1"));assert(good.snapshot.aircraft[0].alt==12000);
+    mini::Decoder surface(51.5,0,2);
+    assert(decode(surface,R"({"ac":[{"hex":"ground1","lat":51.5,"lon":0.01,"seen_pos":0,"alt_baro":"ground","alt_geom":100,"gs":30},{"hex":"air1","lat":51.5,"lon":0.01,"seen_pos":0,"alt_baro":0,"gs":0},{"hex":"air2","lat":51.5,"lon":0.01,"seen_pos":0,"alt_baro":-50},{"hex":"air3","lat":51.5,"lon":0.01,"seen_pos":0,"alt_baro":200}]})"));
+    assert(surface.groundSkipped==1&&surface.snapshot.count==3&&surface.snapshot.total==3);
+    assert(!strcmp(surface.snapshot.aircraft[0].hex,"air1")&&surface.snapshot.aircraft[0].alt==0);
     mini::Decoder empty(0,0,2);assert(decode(empty,"{\"ac\":[],\"msg\":\"No error\"}"));assert(!empty.snapshot.count);
     const char *bad[]={"{}","{\"ac\":null}","{\"ac\":[}","{\"ac\":[{},]}","{\"ac\":[],}","{\"ac\":[],\"ac\":[]}","{\"ac\":[]} trailing","{\"ac\":[],\"msg\":\"error\"}","{\"ac\":[{\"nav_modes\":[\"a,\"seen\":1}]}"};
     for(auto s:bad){mini::Decoder d(0,0,2);assert(!decode(d,s));}

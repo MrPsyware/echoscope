@@ -98,7 +98,7 @@ void fetchFeed(){
                 decoder->snapshot.received=millis();
                 Lock lock;if(requestedRange==range){shared.data=decoder->snapshot;++shared.generation;}
             }else snprintf(reason,sizeof(reason),"%s",decoder->error[0]?decoder->error:decoder->stream.error?decoder->stream.error:HTTPClient::errorToString(copied).c_str());
-            deviceLog.printf("[feed] HTTP=%d body=%u aircraft=%u kept=%u result=%s heap=%u\n",code,unsigned(decoder->stream.bytes),unsigned(decoder->snapshot.total),unsigned(decoder->snapshot.count),ok?"OK":reason,ESP.getFreeHeap());
+            deviceLog.printf("[feed] HTTP=%d body=%u aircraft=%u kept=%u ground=%u result=%s heap=%u minimum=%u\n",code,unsigned(decoder->stream.bytes),unsigned(decoder->snapshot.total),unsigned(decoder->snapshot.count),decoder->groundSkipped,ok?"OK":reason,ESP.getFreeHeap(),ESP.getMinFreeHeap());
         }else snprintf(reason,sizeof(reason),"LOW MEMORY");
     }else{
         snprintf(reason,sizeof(reason),"FEED ERROR %d",code);
@@ -243,14 +243,14 @@ void setup(){
     lastActivity=millis();deviceLog.printf("[ready] Mini heap=%u largest=%u\n",ESP.getFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
 }
 void loop(){
-    static uint32_t lastDraw=0,lastLog=0;static unsigned bright=70;
+    static uint32_t lastDraw=0,lastLog=0,renderMs=0;static unsigned bright=70;
     uint32_t now=millis();{Lock lock;frame=shared;}
     if(setupRequested.exchange(false)){view=View::Setup;lastActivity=now;}
     if(seenGeneration!=frame.generation){seenGeneration=frame.generation;selected=0;for(unsigned i=0;i<frame.data.count;++i)if(!strcmp(frame.data.aircraft[i].hex,selectedHex))selected=i;}
     KnobInput state;portENTER_CRITICAL(&inputMux);state=input;portEXIT_CRITICAL(&inputMux);selected=std::min(selected,availableAircraft()?availableAircraft()-1:0);controls(state,now);setupVisible=view==View::Setup;
     if(!sleeping&&bright!=frame.settings.brightness){bright=frame.settings.brightness;board->getBacklight()->setBrightness(bright);}
     if(!sleeping&&view!=View::Setup&&frame.settings.sleepMinutes&&uint32_t(now-lastActivity)>=frame.settings.sleepMinutes*60000u)goSleep();
-    if(!sleeping&&now-lastDraw>=200){lastDraw=now;render(now);}
-    if(now-lastLog>=15000){lastLog=now;deviceLog.printf("[mini] wifi=%d aircraft=%u heap=%u minimum=%u largest=%u\n",frame.connected,frame.data.count,ESP.getFreeHeap(),ESP.getMinFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));}
+    if(!sleeping&&now-lastDraw>=200){lastDraw=now;render(now);renderMs=millis()-now;}
+    if(now-lastLog>=15000){lastLog=now;deviceLog.printf("[mini] wifi=%d aircraft=%u heap=%u minimum=%u largest=%u render=%lums\n",frame.connected,frame.data.count,ESP.getFreeHeap(),ESP.getMinFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT),(unsigned long)renderMs);}
     delay(2);
 }

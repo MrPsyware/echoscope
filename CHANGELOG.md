@@ -2,6 +2,8 @@
 
 ## EchoScope Mini prototype (separate ESP32-C3 target)
 
+- Exclude explicitly ground-marked aircraft while retaining airborne low-altitude reports; add ground-filter counts, minimum heap and rendering-time diagnostics.
+
 - Add standalone 240×240 radar, nearest-32 aircraft details, verified direct HTTPS feed, Wi-Fi/location portal, brightness and sleep settings. No Docker dependency.
 - Reuse tested two-transition encoder calibration and independent button sampling; single/double/held rotation and five-second setup hold replace touch navigation.
 - Stream aircraft objects with bounded buffers and preserve last good data on decode failures. Add Mini-specific build/upload/test targets and CI.

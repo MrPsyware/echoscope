@@ -9,6 +9,7 @@ struct Decoder {
     double lat,lon;
     JsonDocument filter,doc;
     char error[64]{};
+    unsigned groundSkipped=0;
     Decoder(double homeLat,double homeLon,int range):lat(homeLat),lon(homeLon){
         snapshot.range=range;
         for(auto key:{"hex","flight","r","t","lat","lon","alt_baro","alt_geom","gs","track","seen_pos"})filter[key]=true;
@@ -21,6 +22,9 @@ struct Decoder {
     bool aircraft(const char *bytes,size_t size){
         auto e=deserializeJson(doc,bytes,size,DeserializationOption::Filter(filter),DeserializationOption::NestingLimit(24));
         if(e||!doc.is<JsonObject>()){snprintf(error,sizeof(error),"JSON %s",e?e.c_str():"object required");return false;}
+        // Explicit surface status, not an altitude/speed threshold: retain arrivals,
+        // departures and numeric zero/negative altitude reports.
+        if(doc["alt_baro"].is<const char*>()&&!strcmp(doc["alt_baro"].as<const char*>(),"ground")){++groundSkipped;return true;}
         Aircraft a;
         double y=number(doc["lat"]),x=number(doc["lon"]);
         if(!project(y,x,lat,lon,a.east,a.north))return true;
@@ -29,7 +33,6 @@ struct Decoder {
         clean(a.hex,sizeof(a.hex),doc["hex"] | "");if(!a.hex[0])return true;
         clean(a.call,sizeof(a.call),doc["flight"] | "");clean(a.reg,sizeof(a.reg),doc["r"] | "");clean(a.type,sizeof(a.type),doc["t"] | "");
         a.alt=number(doc["alt_baro"]);if(!std::isfinite(a.alt))a.alt=number(doc["alt_geom"]);
-        if(doc["alt_baro"].is<const char*>()&&!strcmp(doc["alt_baro"],"ground"))a.alt=0;
         a.speed=number(doc["gs"]);a.heading=number(doc["track"]);
         keep(snapshot,a);return true;
     }

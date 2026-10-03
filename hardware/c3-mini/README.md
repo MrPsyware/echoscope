@@ -36,6 +36,8 @@ small layouts, not downscaled versions of the large knob.
 
 ## Data and memory
 
+- Exclude aircraft explicitly marked `alt_baro: "ground"`; numeric low/zero
+  altitudes remain eligible, preserving airborne arrivals and departures.
 - Decode one aircraft object at a time, retain the nearest 32 valid positions
   within the selected radius. The footer marks when only the nearest subset fits.
 - Poll around every five seconds after a completed request, with error backoff

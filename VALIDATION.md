@@ -255,3 +255,9 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
 - Existing ESP32-S3 host regression tests passed. Mini radar, details and setup layouts rendered natively and visually inspected at 240×240.
 - Mini build: 1,255,584 bytes application / 1,966,080-byte slot; 53,220 bytes static RAM. Uses a 7,680-byte DMA strip buffer, no PSRAM. Separate four-megabyte partition layout includes two application slots, NVS and a core-dump partition; OTA upload is not implemented.
 - Uploaded to the C3 with flash hashes verified. Initial setup AP ran with about 145,000 bytes free heap (roughly 142 KiB), largest block 114,676 bytes. End-to-end feed/TLS memory testing on the knob awaits the user's Wi-Fi/location setup. No saved credentials are checked in or logged. The main ESP32-S3 firmware is unchanged.
+
+## Mini ground filter and live resource check
+
+- Exclude explicit `alt_baro: "ground"` before inserting a candidate, including when a geometric altitude is present. Regression test retains numeric zero, negative and low positive airborne altitudes. Mini parser tests passed; build and C3 flash hashes verified.
+- Seven live adsb.fi HTTP 200 requests succeeded with verified TLS 1.2, at 25 km with two aircraft (about 1.5 KiB responses). Post-request free heap remained 154,288 bytes; minimum observed heap 79,912 bytes; largest idle internal block 114,676 bytes. Radar render time 59–60 ms at a 200 ms target period. This is a short, light-traffic sample, not a full-capacity endurance benchmark.
+- Application 1,255,684 / 1,966,080 bytes (63.9% of its slot); 710,396 bytes remain in that slot. Static RAM remains 53,220 bytes. No new large buffer allocation. Ground reports were absent in this live sample; ground exclusion is covered by the targeted parser regression.
