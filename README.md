@@ -1,5 +1,7 @@
 # EchoScope
 
+> **Development branch:** standalone features for the original ESP32-S3 are being tested here. See [standalone scope, setup and validation](docs/STANDALONE.md). This branch is not an official release; stable downloads remain 0.15.0.
+
 **New in 0.15.0:** shared knob navigation, selectable airport markers, and
 **EchoScope Mini** for the 240×240 ESP32-C3 knob. The Mini runs without an info
 server, with altitude-coloured trails, watchlists and built-in/custom airports.
@@ -16,6 +18,8 @@ A live aircraft radar for the **VIEWE UEDX46460015-MD50ET** rotary touchscreen: 
 Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B receiver is required. A labelled demo is available before configuration.
 
 ## Features
+
+This development branch also adds standalone airports, weather, routes and cached maps to the original; [feature sources and setup](docs/STANDALONE.md) describe what works without Docker. Versioned sections below describe the stable releases.
 
 - North-up radar centred on your location, with 5 / 10 / 25 / 50 / 100 km ranges.
 - Rotate to zoom or select aircraft; hold and rotate to change the mode.

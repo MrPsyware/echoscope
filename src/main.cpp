@@ -25,6 +25,10 @@
 #include "radar_ui.h"
 #include "api_ca.h"
 #include "feed_tls_client.h"
+#include "standalone_ca.h"
+#include "standalone_airports.h"
+#include "standalone_json.h"
+#include "standalone_map.h"
 
 SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 namespace {
@@ -42,6 +46,10 @@ uint32_t photoRetryAt=0;
 char photoAttempt[16]{};
 lv_color_t *photoPixels=nullptr,*mapPixels=nullptr;
 bool capsPhotos=false,capsMaps=false,capsSatellites=false,mapWanted=true;
+bool remoteMaps=false,remoteWeather=false,remoteFlights=false,remoteAirports=false,remoteAirportOverlay=false;
+String customAirportText;
+standalone::CustomAirports customAirports;
+bool builtInAirports=true;
 String familyFlight,familyCallsign,familyArrival;
 uint32_t nextRoute=0;
 uint32_t nextLog=0,nextLogMap=0,lastLogRequested=0;
@@ -396,16 +404,19 @@ void setupPage() {
     const char *effects[]={"Off","Steady","Gentle pulse","Flash"};
     for(int i=0;i<4;++i) page+="<option value='"+String(i)+"' "+String(i==int(savedAlertStyle.effect)?"selected":"")+">"+effects[i]+"</option>";
     page+="</select><p>Brightness is relative to the display brightness. Colours also identify watch markers. With several categories present, the outer ring prioritises military, then helicopters, then other watch matches. Off hides the outer ring; markers remain.</p>";
-    page+="<fieldset><legend>Info server features</legend><p>Everything in this section requires the optional Docker info server. Photos, routes, maps, weather, space stations and logbook appear when supported.</p>";
+    page+="<fieldset><legend>Info server features</legend><p>The optional server adds photos, space stations, logbook and family-flight tracking, and can provide maps, weather, routes and airports.</p>";
     page+="<label>Info server URL (optional)</label><input name='photo_url' maxlength='160' placeholder='http://192.168.1.10:8086' value='"+escape(photoBase)+"'>";
-    page+="<p>Leave blank to disable external features. Capabilities are discovered automatically. Use your Docker server's LAN address.</p><button type='button' onclick=\"const b=this;b.disabled=true;fetch('/test-photo',{method:'POST',body:new URLSearchParams(new FormData(b.form))}).then(async r=>{document.getElementById('test-result').textContent=await r.text()}).catch(()=>{document.getElementById('test-result').textContent='Connection test failed'}).finally(()=>b.disabled=false)\">Test connection</button><p id='test-result' role='status'></p>";
-    if(capsFlights) {
+    page+="<p>Leave blank for standalone airports, weather, routes and maps. Capabilities are discovered automatically. Use your Docker server's LAN address.</p><button type='button' onclick=\"const b=this;b.disabled=true;fetch('/test-photo',{method:'POST',body:new URLSearchParams(new FormData(b.form))}).then(async r=>{document.getElementById('test-result').textContent=await r.text()}).catch(()=>{document.getElementById('test-result').textContent='Connection test failed'}).finally(()=>b.disabled=false)\">Test connection</button><p id='test-result' role='status'></p>";
+    if(remoteFlights) {
         page+="<h3>Family flight</h3><input type='hidden' name='family_setting' value='1'><p>Free live tracking, including beyond radar range. Booking numbers and broadcast callsigns can differ. Confirm the flight/date with the airline; no arrival or delay estimates.</p>";
         page+="<label>Flight number (blank disables)</label><input name='family_flight' maxlength='10' placeholder='U2123' value='"+escape(familyFlight)+"'>";
         page+="<label>Actual callsign override (optional)</label><input name='family_callsign' maxlength='10' placeholder='EZY123' value='"+escape(familyCallsign)+"'>";
         page+="<label>Arrival airport IATA / ICAO (optional)</label><input name='family_arrival' maxlength='10' placeholder='LGW' value='"+escape(familyArrival)+"'>";
     }
-    if(capsAirportOverlay) {
+    page+="</fieldset><fieldset><legend>Maps and airports</legend><p>Work without Docker. When a server offers a feature, its data is used instead. Standalone weather and routes are fetched directly over HTTPS.</p>";
+    page+="<label><input style='width:auto' type='checkbox' name='builtin_airports' "+String(builtInAirports?"checked":"")+"> Built-in worldwide large airports</label>";
+    page+="<label>Custom standalone airports</label><textarea name='custom_airports' maxlength='2048' rows='5' style='box-sizing:border-box;width:100%;font:inherit'>"+escape(customAirportText)+"</textarea><p>Up to 32 entries, one per line: LGW: -0.185739/51.148744 (longitude/latitude). Custom entries override matching built-in codes. Runways are included for built-in airports where available.</p>";
+    {
         page+="<h3>Airport overlay</h3><input type='hidden' name='airport_setting' value='1'><label>Airports</label><select name='airport_mode'>";
         const char *modes[]={"Off","Airline airports","All airports"};
         for(unsigned i=0;i<3;++i) page+="<option value='"+String(i)+"' "+String(i==ui::airportMode?"selected":"")+">"+modes[i]+"</option>";
@@ -414,10 +425,10 @@ void setupPage() {
         for(unsigned i=0;i<3;++i) page+="<option value='"+String(i)+"' "+String(i==ui::airportSize?"selected":"")+">"+sizes[i]+"</option>";
         page+="</select><label><input style='width:auto' type='checkbox' name='airport_labels' "+String(ui::airportLabels?"checked":"")+"> Airport code labels</label>";
         page+=alertColorInput("airport_color","Airport colour",ui::airportColor);
-        page+="<label>Airport brightness (%)</label><input name='airport_bright' type='number' min='0' max='100' required value='"+String(ui::airportBrightness)+"'><p>Airline airports have scheduled service. Markers appear behind aircraft, with crowded labels hidden. Works with or without the street map. Data: OurAirports.</p>";
+        page+="<label>Airport brightness (%)</label><input name='airport_bright' type='number' min='0' max='100' required value='"+String(ui::airportBrightness)+"'><p>Airline airports have scheduled service. Markers appear behind aircraft. Size and airline filters apply to server data; the standalone pack contains large scheduled-service airports plus your custom entries. Data: OurAirports.</p>";
     }
-    if(capsMaps) page+="<input type='hidden' name='map_setting' value='1'><label><input style='width:auto' type='checkbox' name='map_enabled' "+String(mapWanted?"checked":"")+"> Faint map background</label>";
-    page+="<h3>Home Assistant / observing</h3><input type='hidden' name='integration_setting' value='1'>";
+    page+="<input type='hidden' name='map_setting' value='1'><label><input style='width:auto' type='checkbox' name='map_enabled' "+String(mapWanted?"checked":"")+"> Faint map background</label>";
+    page+="<p>Standalone maps download only the viewed range. Tiles are cached on this device for at least seven days; radar remains usable while a map prepares. Map availability depends on internet access and cache space. Weather times are UTC in standalone mode.</p></fieldset><fieldset><legend>Info server integration</legend><h3>Home Assistant / observing</h3><input type='hidden' name='integration_setting' value='1'>";
     page+="<label><input style='width:auto' type='checkbox' name='integration_enabled' "+String(integrationEnabled?"checked":"")+"> Enable authenticated LAN integration</label>";
     page+="<p>Use this device URL and token in the Docker server configuration. Keep the token private; it grants display controls and access to aircraft/location data.</p><label>Device API token</label><input readonly value='"+escape(apiToken)+"'>";
     page+="<label><input style='width:auto' type='checkbox' name='satellite_alerts' "+String(satelliteAlerts?"checked":"")+"> Alert / wake for visible station passes (2 minutes ahead)</label>";
@@ -432,10 +443,14 @@ bool coordinate(const String &s,double min,double max,double &value) {
     char *end; value=strtod(s.c_str(),&end);
     return end!=s.c_str() && *end==0 && std::isfinite(value) && value>=min && value<=max;
 }
+void resetStandalone();
 void saveSetup() {
     if(!portal || server.arg("token")!=csrf) { server.send(403,"text/plain","Reopen the setup page and try again."); return; }
     String newSSID=server.arg("ssid"), newPassword=server.arg("password"),newPhoto=server.arg("photo_url");
     if(!photoURL(newPhoto)) { server.send(400,"text/plain","Info server URL must be http://SERVER-IP:PORT with no path or credentials"); return; }
+    const String newCustom=server.arg("custom_airports");
+    standalone::CustomAirports parsedAirports;
+    if(newCustom.length()>2048 || !standalone::parseAirports(newCustom.c_str(),parsedAirports)) { server.send(400,"text/plain","Check custom airports: CODE: longitude/latitude; up to 32 unique entries."); return; }
     double lat,lon;
     if(!newSSID.length() || newSSID.length()>32 || newPassword.length()>63 || !coordinate(server.arg("lat"),-90,90,lat) || !coordinate(server.arg("lon"),-180,180,lon)) {
         server.send(400,"text/plain","Check Wi-Fi name and decimal latitude/longitude."); return;
@@ -489,6 +504,9 @@ void saveSetup() {
         lvgl_port_lock(-1); ui::airportMode=unsigned(airportMode); ui::airportSize=unsigned(airportSize);
         ui::airportBrightness=unsigned(airportBright); ui::airportColor=airportColor; ui::airportLabels=server.hasArg("airport_labels"); lvgl_port_unlock();
     }
+    resetStandalone();
+    customAirportText=newCustom; customAirports=parsedAirports; builtInAirports=server.hasArg("builtin_airports");
+    prefs.putString("custom_airports",customAirportText); prefs.putBool("builtin_airports",builtInAirports);
     capsAirportOverlay=false; requestedAirportRange=-1; nextAirports=0;
     lvgl_port_lock(-1); ui::airportOverlayEnabled=false; ui::airportCount=0; ui::airportRange=-1; lvgl_port_unlock();
     if(server.hasArg("integration_setting")) {
@@ -671,25 +689,32 @@ bool infoJSON(const String &path,JsonDocument &doc) {
     if(code!=200) deviceLog.printf("[info] request HTTP=%d\n",code);
     http.end(); return ok;
 }
+#include "standalone_runtime.h"
 void discoverInfo() {
     JsonDocument doc;
-    const bool ok=infoJSON("/health",doc) && doc["service"]=="echoscope-photos" && doc["protocol"]==1;
+    const bool ok=!photoBase.isEmpty() && infoJSON("/health",doc) && doc["service"]=="echoscope-photos" && doc["protocol"]==1;
     const bool legacy=doc["capabilities"].isNull();
     capsPhotos=ok && (legacy || doc["capabilities"]["photos"]==true);
-    capsMaps=ok && doc["capabilities"]["maps"]==true && mapPixels;
+    const bool oldMaps=remoteMaps,oldAirports=remoteAirports,oldOverlay=remoteAirportOverlay,oldWeather=remoteWeather,oldFlights=remoteFlights;
+    remoteMaps=ok && doc["capabilities"]["maps"]==true;
+    capsMaps=mapPixels!=nullptr;
+    if(oldMaps!=remoteMaps) { localMap.cancel(); localMapKey=""; nextMap=nextApproachMap=0; requestedMapRange=-1; requestedApproach=""; }
     capsSatellites=ok && doc["capabilities"]["satellites"]==true;
-    capsWeather=ok && doc["capabilities"]["weather"]==true;
-    capsFlights=ok && doc["capabilities"]["flights"]==true;
-    capsAirportOverlay=ok && doc["capabilities"]["airport_overlay"]==true;
-    capsAirports=ok && doc["capabilities"]["airports"]==true;
+    remoteWeather=ok && doc["capabilities"]["weather"]==true; capsWeather=true;
+    remoteFlights=ok && doc["capabilities"]["flights"]==true; capsFlights=true;
+    remoteAirportOverlay=ok && doc["capabilities"]["airport_overlay"]==true; capsAirportOverlay=true;
+    remoteAirports=ok && doc["capabilities"]["airports"]==true; capsAirports=true;
     capsStargazing=ok && doc["capabilities"]["stargazing"]==true;
     capsHighlights=ok && doc["capabilities"]["highlights"]==true;
+    if(oldAirports!=remoteAirports || oldWeather!=remoteWeather || oldFlights!=remoteFlights) nextInsight=nextRoute=0;
+    if(oldOverlay!=remoteAirportOverlay) { nextAirports=0; requestedAirportRange=-1; }
     lvgl_port_lock(-1);
+    if(oldMaps!=remoteMaps) { ui::mapReady=false; ui::approachMapReady=false; ui::mapMessage[0]=0; }
     ui::airportOverlayEnabled=capsAirportOverlay;
     if(!capsAirportOverlay) { ui::airportCount=0; ui::airportRange=-1; requestedAirportRange=-1; }
     ui::stargazingEnabled=capsStargazing; ui::highlightsEnabled=capsHighlights;
-    ui::weatherEnabled=capsWeather; ui::flightsEnabled=capsFlights; ui::airportsEnabled=capsAirports;
-    if((ui::infoView==1 && !capsWeather) || (ui::infoView==2 && !capsFlights) || (ui::infoView==3 && !capsAirports) || (ui::infoView==4 && !capsStargazing) || (ui::infoView==5 && !capsHighlights)) { ui::infoView=0; ui::infoCount=0; }
+    ui::familyEnabled=remoteFlights; ui::weatherEnabled=capsWeather; ui::flightsEnabled=capsFlights; ui::airportsEnabled=capsAirports;
+    if((ui::infoView==1 && !capsWeather) || (ui::infoView==2 && !remoteFlights) || (ui::infoView==3 && !capsAirports) || (ui::infoView==4 && !capsStargazing) || (ui::infoView==5 && !capsHighlights)) { ui::infoView=0; ui::infoCount=0; }
     ui::photosEnabled=capsPhotos && photoPixels;
     ui::mapsEnabled=capsMaps;
     ui::satellitesEnabled=capsSatellites;
@@ -698,7 +723,7 @@ void discoverInfo() {
     if(!capsPhotos) { ui::photoReady=false; photoAttempt[0]=0; }
     if(!capsMaps) { ui::mapReady=false; requestedMapRange=-1; ui::approachMapReady=false; requestedApproach=""; }
     if(!capsSatellites) { ui::satelliteView=false; ui::stationCount=0; }
-    const char *credit=doc["map_credit"] | "Copyright OpenStreetMap contributors";
+    const char *credit=remoteMaps?(doc["map_credit"] | "Copyright OpenStreetMap contributors"):"Copyright OpenStreetMap contributors";
     snprintf(ui::mapCredit,sizeof(ui::mapCredit),"%s",credit);
     lvgl_port_unlock();
     nextCapabilities=millis()+(ok?60000:30000);
@@ -709,7 +734,7 @@ void fetchAirports(int rangeIndex) {
     const String path="/v1/airport-overlay?lat="+String(homeLat,6)+"&lon="+String(homeLon,6)+"&range="+String(int(sky::ranges[rangeIndex]))+
         "&mode="+(ui::airportMode==1?"airline":"all")+"&size="+(ui::airportSize==1?"medium":ui::airportSize==2?"large":"any");
     JsonDocument doc;
-    if(!infoJSON(path,doc) || !doc["airports"].is<JsonArray>() || doc["airports"].size()>32) return;
+    if(!((remoteAirportOverlay && infoJSON(path,doc)) || localAirports(doc,true,rangeIndex)) || !doc["airports"].is<JsonArray>() || doc["airports"].size()>32) return;
     ui::AirportMarker markers[32]{}; unsigned count=0;
     for(JsonObjectConst a:doc["airports"].as<JsonArrayConst>()) {
         const double lat=a["lat"] | NAN,lon=a["lon"] | NAN;
@@ -723,6 +748,7 @@ void fetchAirports(int rangeIndex) {
     deviceLog.printf("[airports] Loaded %u markers at %d km\n",count,int(sky::ranges[rangeIndex]));
 }
 void fetchMap(int rangeIndex) {
+    if(!remoteMaps) { requestedMapRange=rangeIndex; localMapStep("radar/"+String(rangeIndex)+"/"+String(homeLat,6)+"/"+String(homeLon,6),homeLat,homeLon,sky::ranges[rangeIndex],rangeIndex); return; }
     requestedMapRange=rangeIndex; nextMap=millis()+10000;
     NetworkClient client; HTTPClient http; http.setConnectTimeout(1500); http.setTimeout(4000); http.useHTTP10(true);
     const String path="/v1/map?lat="+String(homeLat,6)+"&lon="+String(homeLon,6)+"&range="+String(int(sky::ranges[rangeIndex]));
@@ -743,9 +769,11 @@ void fetchMap(int rangeIndex) {
         }
     }
     http.end();
+    if(code!=200 && code!=202 && code!=429) { remoteMaps=false; nextMap=0; localMapKey=""; }
     deviceLog.printf("[info] map range=%d HTTP=%d\n",int(sky::ranges[rangeIndex]),code);
 }
 void fetchApproachMap(const String &airport,double lat,double lon) {
+    if(!remoteMaps) { requestedApproach=airport; localMapStep("airport/"+airport+"/"+String(lat,6)+"/"+String(lon,6),lat,lon,20,-1,airport); return; }
     requestedApproach=airport; nextApproachMap=millis()+10000;
     NetworkClient client; HTTPClient http; http.setConnectTimeout(1500); http.setTimeout(4000); http.useHTTP10(true);
     const String path="/v1/map?lat="+String(lat,6)+"&lon="+String(lon,6)+"&range=20";
@@ -766,7 +794,9 @@ void fetchApproachMap(const String &airport,double lat,double lon) {
             lvgl_port_unlock();
         }
     }
-    http.end(); deviceLog.printf("[info] airport map %s HTTP=%d\n",airport.c_str(),code);
+    http.end();
+    if(code!=200 && code!=202 && code!=429) { remoteMaps=false; nextApproachMap=0; localMapKey=""; }
+    deviceLog.printf("[info] airport map %s HTTP=%d\n",airport.c_str(),code);
 }
 void fetchStations() {
     nextStations=millis()+10000;
@@ -800,7 +830,8 @@ void fetchInsight(int view) {
     else return;
     if(view==3 && airportTarget.length()) path+="&airport="+airportTarget;
     JsonDocument doc;
-    const bool ok=infoJSON(path,doc);
+    const bool ok=view==1?((remoteWeather && infoJSON(path,doc)) || localWeather(doc)):
+        view==3?((remoteAirports && infoJSON(path,doc)) || localAirports(doc,false,0,airportTarget)):infoJSON(path,doc);
     const int64_t generated=doc["generated"] | int64_t(0);
     const int64_t age=int64_t(time(nullptr))-generated;
     const bool fresh=age>=-30 && age<=(view==2?60:1800);
@@ -852,7 +883,7 @@ void fetchInsight(int view) {
 }
 void fetchRoute(const String &call) {
     lastRoute=call; nextRoute=millis()+30000;
-    JsonDocument doc; const bool ok=infoJSON("/v1/route?flight="+call,doc);
+    JsonDocument doc; const bool ok=(remoteFlights && infoJSON("/v1/route?flight="+call,doc)) || localRoute(call,doc);
     ui::InfoPage page{};
     if(ok) {
         sky::copyText(page.title,doc["pages"][0]["title"]); unsigned n=0;
@@ -903,7 +934,7 @@ void fetchLogbook() {
     }
 }
 void fetchInfo() {
-    if(photoBase.isEmpty() || ui::asleep.load()) return;
+    if(ui::asleep.load()) { localMap.cancel(); localMapKey=""; return; }
     const uint32_t now=millis();
     if(int32_t(now-nextCapabilities)>=0) { discoverInfo(); return; }
     lvgl_port_lock(-1);
@@ -918,6 +949,7 @@ void fetchInfo() {
         const auto &p=ui::infoPages[ui::infoPage]; approach=p.item; approachLat=p.airport.lat; approachLon=p.airport.lon;
     }
     lvgl_port_unlock();
+    if(!mapWanted || (!radar && approach.isEmpty())) { localMap.cancel(); localMapKey=""; }
     if(insight) {
         if(needsInfo || lastInsight!=insight) { nextInsight=0; lastInsight=insight; }
         if(int32_t(now-nextInsight)>=0) { fetchInsight(insight); return; }
@@ -1055,7 +1087,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.15.0 / unified navigation and logbook");
+    deviceLog.println("EchoScope 0.16.0-dev.1 / standalone development");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
@@ -1065,6 +1097,8 @@ void setup() {
     pickupKm=std::max<uint32_t>(5,std::min<uint32_t>(1000,prefs.getUInt("pickup_km",100)));
     familyFlight=prefs.getString("family_flight",""); familyCallsign=prefs.getString("family_call",""); familyArrival=prefs.getString("family_arr","");
     snprintf(ui::familyNumber,sizeof(ui::familyNumber),"%s",familyFlight.c_str());
+    customAirportText=prefs.getString("custom_airports",""); standalone::parseAirports(customAirportText.c_str(),customAirports);
+    builtInAirports=prefs.getBool("builtin_airports",true);
     photoBase=prefs.getString("photo_url",""); ui::photosEnabled=false;
     ui::airportMode=std::min<uint32_t>(2,prefs.getUInt("apt_mode",1)); ui::airportSize=std::min<uint32_t>(2,prefs.getUInt("apt_size",0));
     ui::airportBrightness=std::min<uint32_t>(100,prefs.getUInt("apt_bright",35)); ui::airportColor=prefs.getUInt("apt_color",0x9BB8CD)&0xFFFFFF;
@@ -1166,7 +1200,7 @@ void loop() {
     }
     server.handleClient(); if(apActive) dns.processNextRequest();
     if(!connected && configured && int32_t(now-nextReconnect)>=0) { WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=now+20000; }
-    if(ui::asleep.load()) { if(configured && connected && int32_t(now-nextFetch)>=0) fetch(); delay(20); return; }
+    if(ui::asleep.load()) { localMap.cancel(); localMapKey=""; if(configured && connected && int32_t(now-nextFetch)>=0) fetch(); delay(20); return; }
     if(!configured) {
         static uint32_t lastDemo=0;
         if(uint32_t(now-lastDemo)>1000) { demoFrame(now); lastDemo=now; }

@@ -17,7 +17,7 @@ const char *devicePage() {
 void apiState() {
     if(!apiAuthorized()) return;
     JsonDocument doc;
-    doc["protocol"]=1; doc["id"]=WiFi.macAddress(); doc["version"]="0.15.0";
+    doc["protocol"]=1; doc["id"]=WiFi.macAddress(); doc["version"]="0.16.0-dev.1";
     doc["lat"]=homeLat; doc["lon"]=homeLon;
     doc["family_flight"]=familyFlight; doc["family_callsign"]=familyCallsign; doc["family_arrival"]=familyArrival;
     doc["pickup_km"]=pickupKm; doc["satellite_alerts"]=satelliteAlerts;
@@ -63,7 +63,7 @@ void apiControl() {
         if(doc["screen"].as<bool>()) wakeForInput(now);
         else { ui::pickupArmed=false; ui::notificationUntil=0; ui::activity.sleepExplicitly(); ui::asleep=true; board->getLCD()->setDisplayOnOff(false); }
     } else if(doc["pickup"].is<bool>()) {
-        if(doc["pickup"].as<bool>() && (familyFlight.isEmpty() || familyArrival.isEmpty() || !capsFlights)) { code=409; message="Configure family flight and arrival airport first"; }
+        if(doc["pickup"].as<bool>() && (familyFlight.isEmpty() || familyArrival.isEmpty() || !remoteFlights)) { code=409; message="Configure family flight and arrival airport first"; }
         else { ui::pickupArmed=doc["pickup"].as<bool>(); ui::pickupStarted=now; if(ui::pickupArmed) { wakeForInput(now); ui::infoMenu=false; ui::satelliteView=false; ui::infoView=2; ui::infoCount=0; ui::infoNeedsFetch=true; } }
     } else if(doc["notify"].is<JsonObjectConst>()) {
         const char *value=doc["notify"]["message"] | "";

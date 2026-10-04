@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.0-dev.1 — unreleased, original ESP32-S3
+
+- Add automatic standalone airport, weather/cloud, aircraft-route and map providers. Keep photos, stations and logbook server-only.
+- Include 1,153 worldwide large scheduled-service airports and runway geometry, with up to 32 custom coordinates in setup.
+- Render maps incrementally in PSRAM and retain on-demand PNG tiles in the existing data partition; preserve fresh tiles for at least seven days.
+- Separate standalone settings from server integrations and add host tests for the new data transformations and projection.
+- Development only: physical-device validation remains pending; no change to the stable release or Mini behaviour.
+
 ## 0.15.0
 
 ### Original EchoScope

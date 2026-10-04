@@ -25,6 +25,7 @@ inline char photoReg[16]{},photoCredit[128]{},photoLink[256]{},photoStatus[48]="
 inline lv_img_dsc_t photoImage{},mapImage{};
 inline bool mapsEnabled=false,mapReady=false,mapWanted=true,satellitesEnabled=false,satelliteView=false;
 inline int mapRange=-1,stationIndex=0;
+inline char mapMessage[64]{};
 inline char mapCredit[96]="Copyright OpenStreetMap contributors";
 inline sky::Station stations[8]{};
 inline unsigned stationCount=0;
@@ -297,6 +298,7 @@ inline void render(uint32_t now) {
     }
     const bool drawMap=mapsEnabled && mapWanted && mapReady && mapRange==model.rangeIndex;
     if(drawMap) { lv_draw_img_dsc_t image; lv_draw_img_dsc_init(&image); lv_canvas_draw_img(canvas,23,23,&mapImage,&image); }
+    if(mapsEnabled && mapWanted && !drawMap && mapMessage[0]) text(357,mapMessage,&lv_font_montserrat_12,muted);
     for(int i=1;i<=4;++i) circle(centre,centre,radius*i/4,grid);
     line(centre-radius,centre,centre+radius,centre,grid);
     line(centre,centre-radius,centre,centre+radius,grid);

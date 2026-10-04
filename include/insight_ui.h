@@ -3,6 +3,7 @@
 inline bool stargazingEnabled=false,highlightsEnabled=false;
 inline bool pickupArmed=false; inline uint32_t pickupStarted=0;
 inline char notification[121]{}; inline uint32_t notificationUntil=0,notificationCountdown=0;
+inline bool familyEnabled=false;
 inline bool weatherEnabled=false,flightsEnabled=false,airportsEnabled=false;
 inline bool infoMenu=false,infoNeedsFetch=false;
 inline int infoSelection=0,infoView=0,infoPage=0; // 1 weather, 2 family, 3 airports, 4 stargazing, 5 highlights
@@ -17,9 +18,9 @@ inline InfoPage infoPages[9]{};
 inline unsigned infoCount=0;
 inline uint32_t infoReceived=0,infoGenerated=0;
 inline char infoSource[64]{},infoMessage[64]="Loading...";
-inline bool infoAvailable() { return stargazingEnabled || highlightsEnabled || satellitesEnabled || weatherEnabled || (flightsEnabled && (familyNumber[0])) || airportsEnabled; }
+inline bool infoAvailable() { return stargazingEnabled || highlightsEnabled || satellitesEnabled || weatherEnabled || (familyEnabled && (familyNumber[0])) || airportsEnabled; }
 inline bool infoOption(int option) {
-    return option==0?satellitesEnabled:option==1?weatherEnabled:option==2?flightsEnabled && familyNumber[0]:option==3?airportsEnabled:option==4?stargazingEnabled:option==5?highlightsEnabled:false;
+    return option==0?satellitesEnabled:option==1?weatherEnabled:option==2?familyEnabled && familyNumber[0]:option==3?airportsEnabled:option==4?stargazingEnabled:option==5?highlightsEnabled:false;
 }
 inline void resetLog(bool preservePage=false);
 inline constexpr int infoOrder[]={5,2,3,1,4,0};

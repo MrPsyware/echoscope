@@ -313,3 +313,20 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
   Actions run, rather than older local build output.
 - No additional device flashing is part of release preparation. Prior entries
   record the hardware feature, save/reconnect and sleep/wake checks.
+
+## 0.16.0-dev.1 — standalone original development branch
+
+On `dev/standalone-pro`, host model/input, JSON, photo, network-client and new
+standalone tests pass. New checks cover airport coordinates/overrides/pinned
+selection, forecast missing values and page structure, routes and map projection
+including dateline wrapping. The original ESP32-S3 firmware builds and packages:
+2,032,948 bytes linker flash use (31.0% of OTA slot), 101,852 bytes static RAM
+(31.1%). Live Open-Meteo and adsbdb responses passed the production C++ normalization
+functions on the host; both endpoints verified with the firmware's root set.
+The OSM tile host requires GlobalSign Root R3, verified separately and included.
+No unviewed tile batch was downloaded for validation.
+
+No device was flashed. First-boot LittleFS creation, PNG decoding on ESP32, map
+cache reuse, all-range/airport map alignment and frame/input/feed timing remain
+physical-device checks before release. See `docs/STANDALONE.md`. Main and the
+published 0.15.0 release are unchanged.

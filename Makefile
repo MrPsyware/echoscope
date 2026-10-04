@@ -62,6 +62,8 @@ test: deps
 	.tools/tests/json_test
 	$(CXX) -std=c++17 -Wall -Wextra -Werror -I include tests/photo_test.cpp -o .tools/tests/photo_test
 	.tools/tests/photo_test
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -I include -I ".pio/libdeps/$(ENV)/ArduinoJson/src" tests/standalone_test.cpp -o .tools/tests/standalone_test
+	.tools/tests/standalone_test
 	"$(PY)" tests/network_device_test.py
 firmware: build
 	"$(PY)" scripts/package_firmware.py --environment "$(ENV)"
