@@ -3,6 +3,7 @@
 #include <cctype>
 #include <cstdlib>
 namespace mini {
+inline unsigned backlightDuty(unsigned percent){return 100-std::min(100u,percent);}
 struct Airport {char code[9]{};float lon=0,lat=0;};
 struct AirportList {Airport items[32]{};unsigned count=0;};
 // Exact, case-insensitive comma/space-separated identifiers, never substring matches.

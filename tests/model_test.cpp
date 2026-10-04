@@ -1,6 +1,7 @@
 #include "radar_model.h"
 #include "input_gate.h"
 #include "airport_hit.h"
+#include "radar_selection.h"
 #include "detail_gesture.h"
 #include "activity.h"
 #include "button_debounce.h"
@@ -240,5 +241,15 @@ int main() {
     assert(airportHit.contains(85,100) && airportHit.contains(145,100));
     assert(!airportHit.contains(160,100) && !airportHit.contains(100,125));
     airportHit.labelW=0; assert(!airportHit.contains(145,100));
+    const RadarChoice choices[]={{"plane1",0,false},{"plane2",1,false},{"LGW",0,true},{"LHR",1,true}};
+    assert(nextRadarChoice(choices,4,"plane2",false,1)==2);
+    assert(nextRadarChoice(choices,4,"LGW",true,-1)==1);
+    assert(nextRadarChoice(choices,4,"LHR",true,1)==0);
+    assert(nextRadarChoice(choices,4,"plane1",false,-1)==3);
+    assert(nextRadarChoice(choices,4,"gone",true,1)==0);
+    assert(nextRadarChoice(choices,0,"LGW",true,1)==-1);
+    const RadarChoice airportsOnly[]={{"LGW",4,true},{"LHR",8,true}};
+    assert(nextRadarChoice(airportsOnly,2,"LGW",true,1)==1);
+    assert(nextRadarChoice(airportsOnly,2,"LHR",true,-1)==0);
     std::cout << "Passed: geometry, modes, visible selection, touch/button arbitration, persistent bounded trails, range/stale cleanup and clipping.\n";
 }

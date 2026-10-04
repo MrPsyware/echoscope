@@ -122,7 +122,7 @@ void knobSingle(uint32_t now) {
     if(ui::notificationUntil) ui::notificationUntil=0;
     else if(ui::settings) ui::settings=false;
     else if(ui::infoMenu) ui::pressInfo();
-    else if(!ui::infoView && !ui::satelliteView && !ui::model.details) { ui::radarControls.show(now); ui::model.openSelected(now); }
+    else if(!ui::infoView && !ui::satelliteView && !ui::model.details) { ui::radarControls.show(now); ui::openRadarSelection(now); }
 }
 void knobBack(uint32_t now) {
     if(ui::pageAnimating) return;
@@ -150,7 +150,7 @@ void controls(lv_timer_t *) {
                 const int previousBand=ui::model.altitudeFilter; const auto previousType=ui::model.filter;
                 if(ui::infoMenu || ui::infoView) ui::rotateInfo(event.steps);
                 else if(ui::satelliteView) ui::rotateStations(event.steps);
-                else { if(!ui::model.details) ui::radarControls.rotate(now); ui::model.rotate(delta,now); }
+                else { if(!ui::model.details) ui::radarControls.rotate(now); if(!ui::model.details && ui::model.rotationMode()==1)ui::rotateRadarSelection(delta,now);else ui::model.rotate(delta,now); }
                 if(previousBand!=ui::model.altitudeFilter || previousType!=ui::model.filter) ui::requestFeed=true;
             }
         } else if(event.kind==sky::ButtonDebounce::Down) {

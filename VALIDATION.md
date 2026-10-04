@@ -277,3 +277,23 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
   still pending user feedback. Mini firmware was not changed or reflashed.
 - Airport targeting requires the accompanying information-server update; its
   source is updated here, but the user's Docker host was not redeployed.
+
+## Radar airport selection and Mini recovery/power fixes — 4 October 2026
+
+- Original radar selection now wraps across visible aircraft and drawn airport
+  markers, using stable airport codes across feed refreshes. Host tests cover
+  aircraft/airport boundaries, reverse wrap, missing selections and airport-only
+  lists. The existing model, JSON, protocol and network-tool checks also pass.
+- Both targets build successfully. Original app image: 1,782,384 bytes; Mini
+  linker flash usage: 1,280,736 bytes, static RAM 68,044 bytes.
+- Original wireless upload succeeded after physical setup unlock; reboot logs
+  confirm a successful live feed and airport overlay loading.
+- Mini uploaded over USB (hardware serial 34:CD:B0:CE:55:88, now /dev/ttyACM1).
+  Submitted all existing web settings unchanged: response confirmed restart,
+  boot/form-token change verified restart, and every saved field matched after
+  reconnection. Serial logs then confirmed three verified-TLS HTTP 200 feeds.
+- Mini backlight polarity is inverted relative to the pinned library's board
+  profile. The manufacturer schematic shows GPIO8 driving the CJ3407 P-channel
+  gate (active low). Brightness mapping now compensates in one helper used for
+  startup, configuration, sleep and wake; endpoint/clamping tests pass.
+- User confirmed the Mini backlight goes fully dark in Sleep and wakes normally.

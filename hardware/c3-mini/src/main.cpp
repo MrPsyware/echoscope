@@ -33,6 +33,7 @@ std::atomic<bool> setupRequested{false},sleeping{false},refreshRequested{false},
 std::atomic<int> requestedRange{2};
 Preferences prefs;WebServer server(80);DNSServer dns;
 char apName[24]{},apPassword[13]{},csrf[33]{};
+uint32_t restartAt=0;
 bool apActive=false;uint32_t connectStarted=0,nextReconnect=0,nextFetch=0,backoff=5000;
 void status(const char *s){Lock lock;snprintf(shared.status,sizeof(shared.status),"%s",s);}
 void startAP(){if(apActive)return;WiFi.mode(WIFI_AP_STA);if(WiFi.softAP(apName,apPassword)){apActive=true;setupRequested=true;dns.start(53,"*",WiFi.softAPIP());deviceLog.println("[wifi] Setup AP started");}}
@@ -82,8 +83,12 @@ void saveSettings(){
     prefs.putString("ssid",c.ssid);prefs.putString("pass",c.password);prefs.putDouble("lat",lat);prefs.putDouble("lon",lon);prefs.putUInt("range",c.range);prefs.putUInt("brightness",c.brightness);prefs.putUInt("sleep",c.sleepMinutes);prefs.putBool("set",true);
     {Lock lock;shared.settings=c;shared.data=mini::Snapshot{};++shared.generation;}
     requestedRange=c.range;refreshRequested=true;
-    server.send(200,"text/html","<meta name='viewport' content='width=device-width'><h1>Saved</h1><p>Connecting to your Wi-Fi. The setup hotspot closes once connected. The knob will show its new IP address. Click the knob to return to radar.</p>");
-    WiFi.begin(c.ssid,c.password);connectStarted=millis();nextReconnect=connectStarted+20000;nextFetch=0;status("CONNECTING WIFI");
+    server.sendHeader("Connection","close");
+    server.send(200,"text/html","<meta name='viewport' content='width=device-width'><h1>Saved</h1><p>EchoScope Mini is restarting with your settings. It will reconnect to Wi-Fi and return to radar automatically. Reopen its LAN address after it reconnects.</p>");
+    // Give the HTTP response time to leave before restarting. Do not start another
+    // feed or reconfigure Wi-Fi under an existing TLS/network state.
+    restartAt=millis()+1000;status("SAVED / RESTARTING");
+    deviceLog.println("[setup] Settings saved; restarting");
 }
 class FeedSink:public Stream {
 public:
@@ -146,7 +151,9 @@ void networkTask(void *){
     if(c.configured){WiFi.begin(c.ssid,c.password);status("CONNECTING WIFI");}else{startAP();status("SETUP REQUIRED");setupRequested=true;}
     connectStarted=millis();nextReconnect=connectStarted+20000;
     for(;;){
-        server.handleClient();if(apActive)dns.processNextRequest();c=settingsCopy();
+        server.handleClient();
+        if(restartAt){if(int32_t(millis()-restartAt)>=0)ESP.restart();vTaskDelay(pdMS_TO_TICKS(10));continue;}
+        if(apActive)dns.processNextRequest();c=settingsCopy();
         uint32_t now=millis();bool connected=WiFi.status()==WL_CONNECTED;
         if(connected&&apActive){dns.stop();WiFi.softAPdisconnect(true);WiFi.mode(WIFI_STA);apActive=false;deviceLog.println("[wifi] Connected; setup AP stopped");}
         if(!connected){
@@ -270,13 +277,18 @@ void render(uint32_t now){
         if(!board->getLCD()->drawBitmap(0,stripY,W,stripHeight,reinterpret_cast<uint8_t*>(pixels),1000)){deviceLog.println("[display] transfer failed");return;}
     }
 }
-void goSleep(){sleeping=true;board->getBacklight()->setBrightness(0);board->getLCD()->setDisplayOnOff(false);}
+void setBacklight(unsigned percent){
+    // MD50E schematic: GPIO8 drives Q1 (P-channel CJ3407), so LOW means ON.
+    // The pinned vendor board profile has ON_LEVEL=1: invert its PWM percentage.
+    if(!board->getBacklight()->setBrightness(mini::backlightDuty(percent)))deviceLog.println("[power] Backlight command failed");
+}
+void goSleep(){sleeping=true;setBacklight(0);board->getLCD()->setDisplayOnOff(false);deviceLog.println("[power] Sleeping; backlight off");}
 unsigned availableAircraft(){unsigned n=0;while(n<frame.data.count&&frame.data.aircraft[n].km<=mini::ranges[requestedRange.load()])++n;return n;}
 void controls(const KnobInput &state,uint32_t now){
     static KnobInput previous;
     bool action=state.freeSteps!=previous.freeSteps||state.heldSteps!=previous.heldSteps||state.down!=previous.down||state.singles!=previous.singles||state.doubles!=previous.doubles||state.holds!=previous.holds;
     if(action)lastActivity=now;
-    if(action&&sleeping){sleeping=false;board->getLCD()->setDisplayOnOff(true);board->getBacklight()->setBrightness(frame.settings.brightness);ignoreWake=true;refreshRequested=true;}
+    if(action&&sleeping){sleeping=false;board->getLCD()->setDisplayOnOff(true);setBacklight(frame.settings.brightness);ignoreWake=true;refreshRequested=true;}
     if(ignoreWake){previous=state;if(!state.down&&!state.raw&&!state.pending)ignoreWake=false;return;}
     if(state.holds!=previous.holds){view=View::Setup;setupRequested=true;}
     int turns=state.freeSteps-previous.freeSteps,held=state.heldSteps-previous.heldSteps;
@@ -302,7 +314,7 @@ void setup(){
     stateMutex=xSemaphoreCreateMutex();assert(stateMutex);input.holdMs=5000;
     pinMode(pinA,INPUT_PULLUP);pinMode(pinB,INPUT_PULLUP);pinMode(pinButton,INPUT_PULLUP);previousAB=(digitalRead(pinA)<<1)|digitalRead(pinB);
     attachInterrupt(pinA,encoder,CHANGE);attachInterrupt(pinB,encoder,CHANGE);
-    board=new Board();assert(board->init());assert(board->begin());pixels=static_cast<uint16_t*>(heap_caps_malloc(W*stripHeight*2,MALLOC_CAP_DMA|MALLOC_CAP_INTERNAL));assert(pixels);board->getBacklight()->setBrightness(70);
+    board=new Board();assert(board->init());assert(board->begin());pixels=static_cast<uint16_t*>(heap_caps_malloc(W*stripHeight*2,MALLOC_CAP_DMA|MALLOC_CAP_INTERNAL));assert(pixels);setBacklight(70);
     assert(xTaskCreate(sampleInputs,"mini-input",2048,nullptr,3,nullptr)==pdPASS);
     assert(xTaskCreate(networkTask,"mini-network",12288,nullptr,1,nullptr)==pdPASS);
     lastActivity=millis();deviceLog.printf("[ready] Mini heap=%u largest=%u\n",ESP.getFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
@@ -314,7 +326,7 @@ void loop(){
     trails.update(frame.data);
     if(seenGeneration!=frame.generation){seenGeneration=frame.generation;selected=0;for(unsigned i=0;i<frame.data.count;++i)if(!strcmp(frame.data.aircraft[i].hex,selectedHex))selected=i;}
     KnobInput state;portENTER_CRITICAL(&inputMux);state=input;portEXIT_CRITICAL(&inputMux);selected=std::min(selected,availableAircraft()?availableAircraft()-1:0);controls(state,now);setupVisible=view==View::Setup;
-    if(!sleeping&&bright!=frame.settings.brightness){bright=frame.settings.brightness;board->getBacklight()->setBrightness(bright);}
+    if(!sleeping&&bright!=frame.settings.brightness){bright=frame.settings.brightness;setBacklight(bright);}
     if(!sleeping&&view!=View::Setup&&frame.settings.sleepMinutes&&uint32_t(now-lastActivity)>=frame.settings.sleepMinutes*60000u)goSleep();
     if(!sleeping&&now-lastDraw>=200){lastDraw=now;render(now);renderMs=millis()-now;}
     if(now-lastLog>=15000){lastLog=now;deviceLog.printf("[mini] wifi=%d aircraft=%u heap=%u minimum=%u largest=%u render=%lums\n",frame.connected,frame.data.count,ESP.getFreeHeap(),ESP.getMinFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT),(unsigned long)renderMs);}

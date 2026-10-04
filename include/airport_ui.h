@@ -6,6 +6,7 @@ inline unsigned airportCount=0,airportMode=1,airportSize=0,airportBrightness=35;
 inline uint32_t airportColor=0x9BB8CD;
 inline bool airportLabels=true,airportOverlayEnabled=false;
 inline int airportRange=-1;
+inline char selectedAirport[9]{};
 inline sky::AirportHit airportHits[32]{};
 inline unsigned airportHitCount=0;
 inline int hitAirport(int x,int y) {
@@ -33,6 +34,8 @@ inline void renderAirports() {
         if(crowded) continue;
         icons[iconCount++]=p;
         auto &hit=airportHits[airportHitCount++]; hit={int(i),p.x,p.y,0,0,0,0};
+        const bool selected=selectedAirport[0] && !std::strcmp(a.code,selectedAirport);
+        if(selected) circle(p.x,p.y,12,amber,2);
         const int r=a.size==0?4:3;
         line(p.x-r,p.y-r,p.x+r,p.y-r,color); line(p.x+r,p.y-r,p.x+r,p.y+r,color);
         line(p.x+r,p.y+r,p.x-r,p.y+r,color); line(p.x-r,p.y+r,p.x-r,p.y-r,color);
@@ -49,6 +52,6 @@ inline void renderAirports() {
         if(crowded) continue;
         labels[labelCount++]=box;
         hit.labelX=box.x; hit.labelY=box.y; hit.labelW=box.w; hit.labelH=box.h;
-        text(box.y,a.code,&lv_font_montserrat_12,color,box.x,box.w);
+        text(box.y,a.code,&lv_font_montserrat_12,selected?amber:color,box.x,box.w);
     }
 }

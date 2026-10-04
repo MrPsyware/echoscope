@@ -35,9 +35,9 @@ The user has confirmed the existing display, Wi-Fi, radar, touch and rotary cont
 
 | Input | Behaviour |
 |---|---|
-| Rotate on radar | Adjust selected range / aircraft / altitude / type mode; starts in aircraft mode |
+| Rotate on radar | Adjust selected range / aircraft+airport selection / altitude / type mode; starts in selection mode |
 | Rotate on a detail/info view | Next item clockwise, preserving the current page |
-| Single mechanical click | Open highlighted aircraft or selected Information entry; close setup |
+| Single mechanical click | Open highlighted aircraft/airport or selected Information entry; close setup |
 | Double mechanical click | Return to radar; from radar, open Information when available |
 | Hold and rotate on radar | Cycle Range / Aircraft / Altitude / Type modes |
 | Hold and rotate in details | Cycle the selected item's pages, including airport approach and logbook trace |

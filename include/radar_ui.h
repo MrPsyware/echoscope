@@ -1,5 +1,6 @@
 #pragma once
 #include "airport_hit.h"
+#include "radar_selection.h"
 #include <lvgl.h>
 #include <cstdio>
 #include <atomic>
@@ -58,6 +59,34 @@ inline lv_point_t screen(sky::Point p) {
 #include "navigation.h"
 #include "insight_ui.h"
 #include "logbook_ui.h"
+inline int selectedAirportIndex() {
+    if(!airportsEnabled || !airportOverlayEnabled || !airportMode || !airportBrightness || airportRange!=model.rangeIndex || !selectedAirport[0])return -1;
+    for(unsigned i=0;i<airportHitCount;++i){int n=airportHits[i].index;if(n>=0 && unsigned(n)<airportCount && !std::strcmp(airportMarkers[n].code,selectedAirport))return n;}
+    return -1;
+}
+inline void openAirport(int index) {
+    if(index<0 || unsigned(index)>=airportCount || !airportsEnabled)return;
+    infoSelection=3;pressInfo();
+    snprintf(airportTarget,sizeof(airportTarget),"%s",airportMarkers[index].code);
+    snprintf(selectedAirport,sizeof(selectedAirport),"%s",airportMarkers[index].code);
+}
+inline void openRadarSelection(uint32_t now) {
+    const int airport=selectedAirportIndex();
+    if(airport>=0)openAirport(airport);
+    else { selectedAirport[0]=0;model.openSelected(now); }
+}
+inline void rotateRadarSelection(int delta,uint32_t now) {
+    sky::RadarChoice choices[sky::maxAircraft+32]{};int count=0;
+    for(unsigned i=0;i<model.data.count;++i)if(model.visible(model.data.aircraft[i],now))choices[count++]={model.data.aircraft[i].hex,i,false};
+    if(airportsEnabled && airportOverlayEnabled && airportMode && airportBrightness && airportRange==model.rangeIndex)
+        for(unsigned i=0;i<airportHitCount;++i){unsigned n=airportHits[i].index;if(n<airportCount)choices[count++]={airportMarkers[n].code,n,true};}
+    const int next=sky::nextRadarChoice(choices,count,selectedAirport[0]?selectedAirport:model.selected,selectedAirport[0]!=0,delta);
+    selectedAirport[0]=0;
+    if(next<0)return;
+    if(choices[next].airport)snprintf(selectedAirport,sizeof(selectedAirport),"%s",choices[next].key);
+    else model.select(choices[next].index);
+}
+
 inline void metric(int y,const char *name,float value,const char *unit) {
     char s[80]; if(std::isfinite(value)) std::snprintf(s,sizeof(s),"%s   %.0f %s",name,value,unit);
     else std::snprintf(s,sizeof(s),"%s   --",name);
@@ -275,7 +304,9 @@ inline void render(uint32_t now) {
     text(drawMap?357:378,"S",&lv_font_montserrat_14,muted);
     text(225,"W",&lv_font_montserrat_14,muted,38,26);
     text(225,"E",&lv_font_montserrat_14,muted,402,26);
+    if(!airportsEnabled)selectedAirport[0]=0;
     renderAirports();
+    if(selectedAirportIndex()<0)selectedAirport[0]=0;
     // Sweep is decorative. Aircraft are always drawn from their last reported position.
     const float angle=(now%8000)*2*sky::pi/8000;
     for(int i=0;i<9;++i) {
@@ -287,7 +318,7 @@ inline void render(uint32_t now) {
     for(int pass=0;pass<2;++pass) for(size_t i=0;i<model.data.count;++i) {
         const auto &a=model.data.aircraft[i];
         if(!model.visible(a,now)) continue;
-        const bool selected=!std::strcmp(a.hex,model.selected);
+        const bool selected=!selectedAirport[0] && !std::strcmp(a.hex,model.selected);
         if(selected!=(pass==1)) continue;
         const auto *trail=model.trailFor(a.hex); if(!trail) continue;
         for(size_t j=1;j<trail->count;++j) {
@@ -302,10 +333,11 @@ inline void render(uint32_t now) {
         auto &a=model.data.aircraft[i];
         if(!model.visible(a,now)) continue;
         ++visible;
-        const bool selected=!std::strcmp(a.hex,model.selected);
+        const bool selected=!selectedAirport[0] && !std::strcmp(a.hex,model.selected);
         drawAircraft(a,screen(a.position),selected,now);
     }
-    if(model.demo) text(84,"DEMO",&lv_font_montserrat_14,muted);
+    if(selectedAirport[0]) { char caption[32];snprintf(caption,sizeof(caption),"AIRPORT %s",selectedAirport);text(80,caption,&lv_font_montserrat_18,amber); }
+    else if(model.demo) text(84,"DEMO",&lv_font_montserrat_14,muted);
     if(drawMap) drawMapAttribution(radarControls.visible(now)?383:401);
     if(radarControls.visible(now)) footer(visible);
     const auto alert=model.activeAlert(now);
@@ -327,19 +359,19 @@ inline void tap(int x,int y,uint32_t now) {
     if(y>=395) {
         radarControls.show(now);
         const auto previous=model.filter; const int band=model.altitudeFilter;
-        model.tapMode(std::max(0,std::min(3,(x-73)/80)),now);
+        const int mode=std::max(0,std::min(3,(x-73)/80));
+        if(mode==1 && model.rotationMode()==1)rotateRadarSelection(1,now);else model.tapMode(mode,now);
         if(previous!=model.filter || band!=model.altitudeFilter) requestFeed=true;
         return;
     }
     float east=(x-centre)*model.range()/radius, north=(centre-y)*model.range()/radius;
     int i=model.hit(east,north,25*model.range()/radius,now);
-    if(i>=0) { model.select(i); model.details=true; }
+    if(i>=0) { selectedAirport[0]=0; model.select(i); model.details=true; }
     else {
         const int airport=hitAirport(x,y);
         if(airport>=0 && airportsEnabled) {
-            infoSelection=3; pressInfo();
-            snprintf(airportTarget,sizeof(airportTarget),"%s",airportMarkers[airport].code);
-        } else model.openSelected(now);
+            openAirport(airport);
+        } else openRadarSelection(now);
     }
 }
 }

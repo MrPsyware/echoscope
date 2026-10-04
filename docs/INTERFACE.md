@@ -3,7 +3,11 @@
 - **Rotate = items.** Clockwise advances an aircraft, forecast period, log entry,
   station, airport or information-menu entry. It wraps at either end. Changing items
   preserves the current page, clamping to the last available page if necessary.
-  The radar has range/aircraft/altitude/type rotation modes.
+  The radar has range/selection/altitude/type rotation modes. In selection mode,
+  aircraft are followed by visible airport markers (when airport details are
+  available). Both directions wrap. An airport keeps its identity across data
+  refreshes, has an orange ring and heading, and opens with a single click.
+  Hidden/out-of-range airports leave the selection list.
 - **Outer segments = items.** One segment per available item, starting at twelve
   o'clock and proceeding clockwise; the selected item is bright. A single item has
   one continuous segment. The radar's outer ring remains its watch alert ring.

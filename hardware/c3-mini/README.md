@@ -10,7 +10,8 @@ firmware target. The established 466×466 ESP32-S3 firmware is unchanged.
 2. Open `http://192.168.4.1/` if a setup page does not appear automatically.
 3. Save your 2.4 GHz Wi-Fi name/password and radar latitude/longitude in decimal
    degrees. Set starting range, brightness and sleep timeout as desired.
-4. The setup hotspot closes when connected. The setup screen then shows the
+4. Save restarts the Mini after storing your settings, then returns to radar
+   automatically. The setup hotspot closes when connected. The setup screen then shows the
    configured network and the knob's LAN IP. Click to view radar.
 
 Wi-Fi and location persist across restarts. Hold the knob for five seconds to
@@ -28,6 +29,10 @@ LAN IP. The Mini contacts adsb.fi directly; **no Docker server is required**.
 - Menu: rotate and click to select Radar, Setup or Sleep.
 - Hold for five seconds without turning: setup.
 - Any interaction while asleep: wake, consuming that wake gesture.
+- Sleep switches off both the LCD image and its backlight. The active-low GPIO8
+  backlight polarity is corrected from the pinned vendor profile, so brightness
+  now increases with the configured percentage. This is display standby, not
+  ESP32 deep sleep.
 
 Button sampling is independent of drawing/networking. Two electrical encoder
 transitions make one clockwise-positive notch. Single-click action waits 400 ms
