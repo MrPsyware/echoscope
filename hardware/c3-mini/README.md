@@ -1,4 +1,4 @@
-# EchoScope Mini — standalone C3 prototype
+# EchoScope Mini — standalone C3
 
 For the VIEWE **UEDX24240013-MD50E**, ESP32-C3 / 4 MB flash, 240×240
 GC9A01 display, rotary encoder and push button. This is a separate, experimental
@@ -80,7 +80,7 @@ small layouts, not downscaled versions of the large knob.
   One airport per line. Invalid/duplicate/out-of-bounds entries reject the save
   without replacing the existing configuration. Watchlists, airport settings
   and the trail display toggle persist alongside the existing display settings.
-- No photos, map tiles or info-server extras in this standalone prototype.
+- No photos, map tiles or info-server extras in this standalone Mini.
 - Wi-Fi and TLS memory are measured in serial logs. Idle hardware-test memory
   must not be treated as available memory for this networked application.
 
@@ -107,7 +107,7 @@ Serial diagnostics:
 .tools/venv/bin/python -m serial.tools.miniterm /dev/ttyACM0 115200
 ```
 
-This prototype has no factory Wi-Fi credentials and uses its own `echo-mini`
+The Mini has no factory Wi-Fi credentials and uses its own `echo-mini`
 preferences namespace. The setup hotspot has a random per-boot password. The
 configuration page is intended for a trusted home network and protects saves
 with a form token. No saved password is included in the page or serial logs.

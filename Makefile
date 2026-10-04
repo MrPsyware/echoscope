@@ -24,7 +24,7 @@ help:
 	  '  make setup       Create a local Python environment and install pinned tools' \
 	  '  make deps        Download the board toolchain and libraries' \
 	  '  make build       Compile the ESP32-S3 firmware' \
-	  '  make mini-build  Build the standalone ESP32-C3 Mini prototype' \
+	  '  make mini-build  Build the standalone ESP32-C3 Mini' \
 	  '  make mini-upload Upload Mini over USB (PORT=/dev/ttyACM0)' \
 	  '  make mini-test   Run Mini streaming-feed and gesture tests' \
 	  '  make test        Run host model/input and JSON tests' \

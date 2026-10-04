@@ -110,7 +110,7 @@ void fetchFeed(){
     HTTPClient http;http.setConnectTimeout(7000);http.setTimeout(5000);http.useHTTP10(true);
     String url="https://opendata.adsb.fi/api/v3/lat/"+String(c.lat,6)+"/lon/"+String(c.lon,6)+"/dist/"+String(int(ceil(mini::ranges[range]/1.852)));
     const char *headers[]={"Content-Encoding","Content-Type","Retry-After"};http.collectHeaders(headers,3);
-    http.begin(client,url);http.setUserAgent("EchoScope-Mini/0.1-prototype");
+    http.begin(client,url);http.setUserAgent("EchoScope-Mini/0.1");
     deviceLog.printf("[feed] start range=%dkm heap=%u largest=%u\n",int(mini::ranges[range]),ESP.getFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
     int code=http.GET();bool ok=false;char reason[64]{};
     if(code==200&&(http.header("Content-Encoding").isEmpty()||http.header("Content-Encoding")=="identity")){
@@ -309,7 +309,7 @@ void controls(const KnobInput &state,uint32_t now){
     previous=state;
 }
 void setup(){
-    Serial.begin(115200);delay(500);deviceLog.println("EchoScope Mini 0.1 prototype / ESP32-C3 standalone");
+    Serial.begin(115200);delay(500);deviceLog.println("EchoScope Mini 0.1 / ESP32-C3 standalone");
     uint64_t mac=ESP.getEfuseMac();snprintf(apName,sizeof(apName),"EchoMini-%04X",unsigned((mac>>32)&0xffff));snprintf(apPassword,sizeof(apPassword),"%08lX",(unsigned long)esp_random());snprintf(csrf,sizeof(csrf),"%08lx%08lx%08lx%08lx",(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random());
     stateMutex=xSemaphoreCreateMutex();assert(stateMutex);input.holdMs=5000;
     pinMode(pinA,INPUT_PULLUP);pinMode(pinB,INPUT_PULLUP);pinMode(pinButton,INPUT_PULLUP);previousAB=(digitalRead(pinA)<<1)|digitalRead(pinB);

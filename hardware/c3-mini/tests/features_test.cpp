@@ -21,6 +21,6 @@ int main(){
     s.received+=5000;s.count=0;trails.update(s);assert(t.count==0); // departed aircraft released
     s.count=32;for(unsigned i=0;i<32;++i)snprintf(s.aircraft[i].hex,9,"%06x",i);s.received+=5000;trails.update(s);
     unsigned count=0;for(auto &track:trails.tracks)count+=track.count>0;assert(count==32);
-    s={};trails.update(s);for(auto &track:trails.tracks)assert(!track.count);
+    s=Snapshot{};trails.update(s);for(auto &track:trails.tracks)assert(!track.count);
     printf("Mini airport, watchlist and trail tests passed; history storage=%zu bytes\n",sizeof(Trails));
 }

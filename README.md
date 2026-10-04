@@ -25,7 +25,7 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 
 Latest firmware: **0.14.0**. Update both firmware and the Docker information server for the enhanced logbook.
 
-A standalone **ESP32-C3 / 240×240 Mini prototype** is available separately: [Mini setup and controls](hardware/c3-mini/README.md). Build/upload it with `make mini-build` / `make mini-upload`; the normal targets continue to serve the larger knob.
+A standalone **ESP32-C3 / 240×240 Mini** is available separately: [Mini setup and controls](hardware/c3-mini/README.md). Build/upload it with `make mini-build` / `make mini-upload`; the normal targets continue to serve the larger knob.
 
 ## Hardware status
 
