@@ -330,3 +330,8 @@ No device was flashed. First-boot LittleFS creation, PNG decoding on ESP32, map
 cache reuse, all-range/airport map alignment and frame/input/feed timing remain
 physical-device checks before release. See `docs/STANDALONE.md`. Main and the
 published 0.15.0 release are unchanged.
+
+The first branch CI run exposed two pre-existing wall-clock-dependent logbook
+tests when simulated flights crossed midnight. Their fixtures now start at a
+fixed UTC noon, with a separate midnight-boundary assertion. All 55 info-service
+tests pass locally; no server runtime code changed.

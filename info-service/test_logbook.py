@@ -6,6 +6,7 @@ import sqlite3
 import tempfile
 import time
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch,Mock
 from PIL import Image
 import spotting
@@ -17,7 +18,8 @@ class Logbook(unittest.TestCase):
         self.store=spotting.Store(':memory:'); self.addCleanup(self.store.db.close)
         self.a={'hex':'abc123','registration':'G-TEST','callsign':'EZY123','type':'A388','age_s':0,'distance_km':15,'east_km':10,'north_km':10,'watched':True}
         self.state={'screen':True,'lat':51.5,'lon':0,'aircraft':[self.a]}
-        self.now=time.time()
+        # A fixed midday keeps multi-hour encounter fixtures within one UTC day.
+        self.now=datetime(2026,10,1,12,tzinfo=timezone.utc).timestamp()
     def test_sleeping_tracking_and_unavailable_route(self):
         self.state['screen']=False
         self.store.ingest(self.state,self.now)
@@ -40,6 +42,12 @@ class Logbook(unittest.TestCase):
         self.assertEqual(len(self.store.rows()),2)
         self.store.ingest(self.state,self.now+15*399+1200)
         self.assertEqual(len(self.store.rows()),3)
+    def test_midnight_starts_a_new_daily_encounter(self):
+        before_midnight=self.now+12*3600-30
+        self.store.ingest(self.state,before_midnight)
+        self.store.ingest(self.state,before_midnight+60)
+        self.assertEqual(len(self.store.rows()),2)
+        self.assertNotEqual(self.store.entry(1)['day'],self.store.entry(2)['day'])
     def test_stationary_updates_are_not_a_reception_gap(self):
         for n in range(10): self.store.ingest(self.state,self.now+n*15)
         self.a['east_km']=11; self.store.ingest(self.state,self.now+150)
@@ -82,7 +90,7 @@ class Logbook(unittest.TestCase):
             packet=service.make_packet(raw.getvalue(),'Photographer','https://www.planespotters.net/photo/1')
             photo_cache.write('G-TEST',packet)
             self.assertEqual(photo_cache.read('G-TEST')[1],'Photographer')
-            path=photo_cache.root()/'G-TEST.ecp'; os.utime(path,(self.now-photo_cache.TTL-1,)*2)
+            path=photo_cache.root()/'G-TEST.ecp'; os.utime(path,(time.time()-photo_cache.TTL-1,)*2)
             self.assertIsNone(photo_cache.read('G-TEST'))
             photo_cache.write('G-TEST',packet); path.write_bytes(b'broken'); self.assertIsNone(photo_cache.read('G-TEST'))
             photo_cache.write('G-TEST',packet); self.assertEqual(photo_cache.clear(),1); self.assertIsNone(photo_cache.read('G-TEST'))
