@@ -2,7 +2,7 @@
 
 **New in 0.14.0:** airport approach radar now fills the display with a 20 km radius,
 optional map and matching aircraft symbols. The radar controls hide after 30 seconds;
-press or touch the bottom to reveal and use them. Airport labels remain beneath aircraft.
+hold and turn the knob, or touch the bottom, to reveal and use them. Airport labels remain beneath aircraft.
 Update both firmware and the Docker information server for 20 km maps.
 
 *A miniature radar station for the aircraft overhead.*
