@@ -1,23 +1,31 @@
 # Changelog
 
-## EchoScope Mini prototype (separate ESP32-C3 target)
+## 0.15.0
 
-- Exclude explicitly ground-marked aircraft while retaining airborne low-altitude reports; add ground-filter counts, minimum heap and rendering-time diagnostics.
+### Original EchoScope
 
-- Add standalone 240×240 radar, nearest-32 aircraft details, verified direct HTTPS feed, Wi-Fi/location portal, brightness and sleep settings. No Docker dependency.
-- Reuse tested two-transition encoder calibration and independent button sampling; single/double/held rotation and five-second setup hold replace touch navigation.
-- Stream aircraft objects with bounded buffers and preserve last good data on decode failures. Add Mini-specific build/upload/test targets and CI.
-- This is experimental hardware support, not an update to the established ESP32-S3 release.
+- Share Mini-style knob navigation: single-click opens a selection, double-click returns to radar or opens Information, hold-and-turn changes radar mode or item page, and a stationary five-second hold opens setup. Retain touch shortcuts.
+- Cycle visible aircraft and airport markers in radar selection mode, with an orange airport highlight. Open an airport by clicking the selection or tapping its icon/label; aircraft overlapping an airport retain tap priority.
+- Include explicitly requested airports in the information server response even outside the usual nearest-nine list. Preserve airport selection across data refreshes.
 
-## Server maintenance after 0.14.0
+### EchoScope Mini
 
-- Make the server root a responsive dark logbook dashboard with project information, totals, full-history search, category/date filters and 50-entry pagination. Keep existing sighting URLs and add compact token-protected photo-cache controls with a return to the dashboard.
+- Add a standalone 240×240 ESP32-C3 target with verified direct adsb.fi HTTPS, streaming JSON decoding, nearest-32 airborne positions and aircraft detail pages. No Docker dependency.
+- Add bounded altitude-coloured trails, exact type/registration/callsign watchlists with configurable alert brightness, and 17 built-in UK major airports or up to 32 custom airport coordinates.
+- Configure Wi-Fi/location, starting range, brightness, sleep, trails, watchlists and airports in the web interface. Exclude explicitly ground-marked aircraft while retaining airborne low-altitude reports.
+- Sample the button independently of rendering; calibrate two encoder transitions per notch. Support single/double-click, hold-and-turn, five-second setup hold and wake gestures.
+- Restart after saving settings to recover a clean network/TLS state. Correct active-low backlight control so Sleep is fully dark and brightness increases as configured.
+- Rename the target's displayed name and CI artifact to Mini; fix aggregate reset compilation on the GitHub host compiler. Add packaged C3 application/initial-flash images and checksums.
 
-- Provide writable, bounded `/tmp` storage for SQLite sorts in the read-only container, fixing `SQLITE_IOERR_GETTEMPPATH` on larger logbooks. Add a Compose regression check with 1,000 synthetic encounters.
+### Information server
 
-- Return an explicit HTTP 503 for logbook database errors instead of dropping the response.
-- Log SQLite extended error names/codes in web, background and startup failures.
-- Add `make docker-db-check` for read-only integrity/storage diagnostics and document preservation before repair. No database reset or firmware update.
+- Make the server root a responsive dark logbook dashboard with project information, totals, full-history search, category/date filters, pagination and token-protected photo-cache controls. Keep existing sighting URLs.
+- Provide bounded writable `/tmp` for SQLite sorts in the read-only container, fixing `SQLITE_IOERR_GETTEMPPATH` on larger logbooks. Add a production-container regression check.
+- Return HTTP 503 and SQLite extended error diagnostics for database failures. Add `make docker-db-check` for read-only integrity/storage diagnostics.
+
+Update the original firmware and information server together for airport shortcuts.
+The Mini is standalone and uses USB uploads. Existing device settings and Docker
+volumes are retained by the normal update commands.
 
 ## 0.14.0
 

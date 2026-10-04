@@ -297,3 +297,19 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
   gate (active low). Brightness mapping now compensates in one helper used for
   startup, configuration, sleep and wake; endpoint/clamping tests pass.
 - User confirmed the Mini backlight goes fully dark in Sleep and wakes normally.
+
+## Release 0.15.0 packaging — 4 October 2026
+
+- Updated the original, Mini and server version strings, README/control guides,
+  changelog and release notes for the shared 0.15.0 release.
+- Original host checks, Mini input/feed/feature tests and all 54 server tests pass.
+  Both firmware targets build and package successfully.
+- Added `make mini-firmware` and CI packaging under `dist/mini/`, with separate
+  C3 application/merged filenames and `MINI-SHA256SUMS`.
+- Verified S3/C3 chip IDs in both applications and merged bootloaders, compared
+  each merged application's bytes at 0x10000 against its application image, and
+  verified every checksum. Local app images: original 1,782,384 bytes;
+  Mini 1,327,280 bytes. GitHub release assets are taken from the matching green
+  Actions run, rather than older local build output.
+- No additional device flashing is part of release preparation. Prior entries
+  record the hardware feature, save/reconnect and sleep/wake checks.

@@ -17,7 +17,7 @@ export PLATFORMIO_CORE_DIR
 export PLATFORMIO_SETTING_ENABLE_TELEMETRY := false
 export PIP_DISABLE_PIP_VERSION_CHECK := 1
 
-.PHONY: help setup deps build test firmware upload flash flash-full monitor ports backup clean docker docker-down docker-logs docker-db-check mini-build mini-upload mini-test
+.PHONY: help setup deps build test firmware upload flash flash-full monitor ports backup clean docker docker-down docker-logs docker-db-check mini-build mini-upload mini-test mini-firmware
 help:
 	@printf '%s\n' \
 	  'EchoScope build commands:' \
@@ -26,6 +26,7 @@ help:
 	  '  make build       Compile the ESP32-S3 firmware' \
 	  '  make mini-build  Build the standalone ESP32-C3 Mini' \
 	  '  make mini-upload Upload Mini over USB (PORT=/dev/ttyACM0)' \
+	  '  make mini-firmware Package Mini app/merged images in dist/mini/' \
 	  '  make mini-test   Run Mini streaming-feed and gesture tests' \
 	  '  make test        Run host model/input and JSON tests' \
 	  '  make firmware    Build app/merged images and checksums in dist/' \
@@ -100,6 +101,8 @@ docker-db-check:
 
 mini-build: setup
 	"$(PY)" -m platformio run -d hardware/c3-mini -e c3-mini -j 2
+mini-firmware: mini-build
+	"$(PY)" scripts/package_firmware.py --environment c3-mini
 mini-upload: mini-build
 	"$(PY)" -m platformio run -d hardware/c3-mini -e c3-mini -t upload --upload-port "$(PORT)"
 mini-test: setup

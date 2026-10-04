@@ -1,8 +1,8 @@
 # EchoScope Mini — standalone C3
 
 For the VIEWE **UEDX24240013-MD50E**, ESP32-C3 / 4 MB flash, 240×240
-GC9A01 display, rotary encoder and push button. This is a separate, experimental
-firmware target. The established 466×466 ESP32-S3 firmware is unchanged.
+GC9A01 display, rotary encoder and push button. **Release 0.15.0.** This is a
+separate firmware target from the 466×466 ESP32-S3 original.
 
 ## First use
 
@@ -91,8 +91,24 @@ From the repository root:
 ```sh
 make mini-build
 make mini-test
+make mini-firmware  # package images and checksums in dist/mini/
 make mini-upload PORT=/dev/ttyACM0
 ```
+
+[GitHub Releases](https://github.com/MrPsyware/echoscope/releases/tag/v0.15.0)
+provides `echoscope-mini-app-0.15.0.bin` for updates and
+`echoscope-mini-merged.bin` for first installation, plus `MINI-SHA256SUMS`.
+For downloaded images, using the project's Python environment:
+
+```sh
+# Existing Mini installation: preserve settings
+.tools/venv/bin/python -m esptool --chip esp32c3 --port /dev/ttyACM0 write_flash 0x10000 echoscope-mini-app-0.15.0.bin
+# First installation only: overwrites the configuration area
+.tools/venv/bin/python -m esptool --chip esp32c3 --port /dev/ttyACM0 write_flash 0x0 echoscope-mini-merged.bin
+```
+
+Use the actual USB port shown by `make ports`; it may be `/dev/ttyACM1`.
+Never flash an original ESP32-S3 image to the Mini.
 
 The upload target is explicitly ESP32-C3. Root `make upload` still targets the
 ESP32-S3 and must not be used for this knob. `mini-upload` is USB only; wireless

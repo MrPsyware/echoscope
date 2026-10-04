@@ -1,4 +1,4 @@
-# EchoScope interface conventions — 0.14.0
+# EchoScope interface conventions — 0.15.0
 
 - **Rotate = items.** Clockwise advances an aircraft, forecast period, log entry,
   station, airport or information-menu entry. It wraps at either end. Changing items

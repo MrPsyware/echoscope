@@ -1,9 +1,11 @@
 # EchoScope
 
-**New in 0.14.0:** airport approach radar now fills the display with a 20 km radius,
-optional map and matching aircraft symbols. The radar controls hide after 30 seconds;
-hold and turn the knob, or touch the bottom, to reveal and use them. Airport labels remain beneath aircraft.
-Update both firmware and the Docker information server for 20 km maps.
+**New in 0.15.0:** shared knob navigation, selectable airport markers, and
+**EchoScope Mini** for the 240×240 ESP32-C3 knob. The Mini runs without an info
+server, with altitude-coloured trails, watchlists and built-in/custom airports.
+Its Save action now reboots cleanly, and Sleep switches the backlight fully off.
+The optional info server adds a searchable dark logbook dashboard and database
+reliability fixes. [Release notes and downloads](https://github.com/MrPsyware/echoscope/releases/tag/v0.15.0).
 
 *A miniature radar station for the aircraft overhead.*
 
@@ -23,7 +25,7 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 - N/E/S/W compass labels and a decorative radar sweep.
 - Local Wi-Fi/location setup, saved settings, stale-data indication and reconnection handling.
 
-Latest firmware: **0.14.0**. Update both firmware and the Docker information server for the enhanced logbook.
+Latest release: **0.15.0** for both devices. Update the Docker information server too if you use it; the Mini does not require one.
 
 A standalone **ESP32-C3 / 240×240 Mini** is available separately: [Mini setup and controls](hardware/c3-mini/README.md). Build/upload it with `make mini-build` / `make mini-upload`; the normal targets continue to serve the larger knob.
 
@@ -121,7 +123,22 @@ make monitor PORT=/dev/ttyACM0
 
 Run `make help` for all commands, including `deps`, `build`, `ports` and `clean`. `clean` keeps downloaded tools and backups. You can override `PYTHON`, `CXX`, `PORT`, `BAUD` and `PLATFORMIO_CORE_DIR`. Use `make -j` only for a single target; operations that share PlatformIO's build directory should not be run simultaneously.
 
-Prebuilt images are available from [GitHub Releases](https://github.com/MrPsyware/echoscope/releases). The older project name was Sky Knob; its NVS storage namespace is intentionally retained for settings compatibility. The setup Wi-Fi is now **EchoScope-Setup**.
+Prebuilt images are available from [GitHub Releases](https://github.com/MrPsyware/echoscope/releases).
+
+| Device | Application update | First installation | Checksums |
+|---|---|---|---|
+| Original ESP32-S3, 466×466 touch | `echoscope-app-0.15.0.bin` | `echoscope-merged.bin` | `SHA256SUMS` |
+| Mini ESP32-C3, 240×240 | `echoscope-mini-app-0.15.0.bin` | `echoscope-mini-merged.bin` | `MINI-SHA256SUMS` |
+
+Use only the image for your device. Application updates retain saved settings;
+merged images are for first installation and overwrite the configuration area.
+The original supports USB or unlocked wireless upload; the Mini currently uses
+USB. See [Mini build and upload instructions](hardware/c3-mini/README.md#build-and-upload).
+
+On the Docker server, update with `git pull` then `make docker`. Existing cache
+and logbook volumes are retained; do not remove volumes during this update.
+
+ The older project name was Sky Knob; its NVS storage namespace is intentionally retained for settings compatibility. The setup Wi-Fi is now **EchoScope-Setup**.
 
 The first build downloads the toolchain. Dependencies are pinned in `platformio.ini`: Arduino-ESP32 3.1.1 through PioArduino, Espressif Display Panel 1.0.3 and LVGL 8.4.0, among others.
 
@@ -135,7 +152,7 @@ The supported `BOARD_VIEWE_UEDX46460015_MD50ET` definition is used. Its touch wi
 
 ## Aircraft and trails
 
-Up to 64 valid airborne aircraft within 100 km are retained, prioritising watchlist matches and then nearest distance. Rotation skips aircraft outside the current visible range. Selection follows aircraft identity across updates. Unknown fields are shown as unavailable; origin/destination lookups are not implemented.
+Up to 64 valid airborne aircraft within 100 km are retained, prioritising watchlist matches and then nearest distance. Rotation skips aircraft outside the current visible range. Selection follows aircraft identity across updates. Unknown fields are shown as unavailable. The optional info server supplies flight-route information on a second detail page when available.
 
 Trails retain the path while the aircraft remains visible and fresh. They clear when the aircraft disappears, exits the current range (including after zooming), or its position ages past 60 seconds. Re-entry starts a new history. The start of the encounter is preserved while older geometry is simplified when the bounded 192-point history fills. Straight sections are simplified within a 20-metre tolerance. Histories are stored in PSRAM and clipped at the radar boundary.
 
