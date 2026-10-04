@@ -11,8 +11,15 @@
   areas are wider than the glyphs (100 pixels inward, y=125–335). No arrows for a
   one-page item. Aircraft details retain their eased slide and swipe support;
   information/logbook pages switch immediately. All item navigation is consistent.
-- **Centre tap / short mechanical press = radar**, except Information's menu where
-  tapping or pressing selects an entry. Tap the menu's bottom area to return.
+- **Single mechanical click = open selection**, on radar or Information's menu.
+  In setup it returns to radar; inside detail pages it leaves the view unchanged.
+- **Double mechanical click = radar**, or Information when already on radar and
+  information features are available. Click recognition waits 400 ms, as on Mini.
+- **Hold and turn = mode/page.** On radar cycle Range / Aircraft / Altitude / Type;
+  inside an item cycle its available pages. Turning consumes release and cancels
+  the five-second setup action. Clockwise advances in all modes, including range.
+- **Centre tap = radar**, except Information's menu where tapping selects an entry.
+  Tap the menu's bottom area to return. These are extra touch shortcuts.
 - **Two-second stationary touch = Information**, from any ordinary awake view.
   Movement cancels the hold; the release tap is consumed. It does not trigger while
   the mechanical button is held or setup is visible. First interaction during sleep
@@ -20,8 +27,8 @@
 - **Five-second mechanical hold = setup**, unchanged. Notifications dismiss on
   a tap/press; a long screen touch can open Information.
 
-The radar footer is **range · aircraft count · Alt · Type**. Short mechanical
-clicks cycle all four modes. Tap an inactive control to select it; tap it again to
+The radar footer is **range · aircraft count · Alt · Type**. Hold-and-turn
+cycles all four modes. Tap an inactive control to select it; tap it again to
 advance its value (range wraps, aircraft advances, Alt/Type cycle their filters).
 Rotation adjusts the selected control. The active mode is bright and underlined.
 Altitude and Type values appear together underneath. Type cycles
@@ -38,7 +45,7 @@ station as pages within that station's item, alongside the outlook item. The log
 shows the latest eight encounters; full retained history is on the server web page.
 
 Consistency recommendation: keep the outer ring informational rather than tappable,
-keep page arrows in the same place, and use the same short action to return to radar.
+keep page arrows in the same place, and use double-click or centre touch to return to radar.
 The separate touch hold prevents accidental menu entry while selecting aircraft.
 
 Information menu order: Logbook, Family flight, Nearby airports, Weather / clouds,
@@ -50,16 +57,16 @@ unless the user interacts. Range, type and altitude filters apply. Failed reques
 retain the last match for at most 60 seconds and keep normal error backoff.
 Explicit remote screen-off suppresses watch wake until a successful no-match feed.
 
-Airport markers are a passive layer behind aircraft and trails. Small outlined
+Airport markers are drawn behind aircraft and trails. Small outlined
 squares with a symbolic runway bar and optional airport-code labels use a separate
-configurable colour/brightness. They do not change aircraft hit testing. Crowded
+configurable colour/brightness. Tap a drawn icon or label to open its airport details. Aircraft hit testing has priority; hidden markers/labels have no hit area. The server includes the selected airport even when it is outside the nearest nine. Crowded
 labels and markers are suppressed against other airports, never against aircraft; use web setup's Info server section to filter
 scheduled airline airports and airport sizes, or disable the overlay.
 
 Nearby airports uses the overlay's airline/size filters before selecting nine
 nearest entries. Rotate changes airports while keeping details/approach page.
 Side arrows toggle airport details and a north-up 20 km radius radar. The item ring
-always represents airports; centre tap/click returns to main radar. The approach
+always represents airports; centre tap/double-click returns to main radar. The approach
 page labels its use of the current home feed and coverage limitations.
 
 The highlighted live aircraft retains its orange symbol and label. Its trail is

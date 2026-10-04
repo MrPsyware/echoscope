@@ -261,3 +261,19 @@ Final build: 1,724,440 application bytes and 93,164 static RAM bytes. This is a 
 - Exclude explicit `alt_baro: "ground"` before inserting a candidate, including when a geometric altitude is present. Regression test retains numeric zero, negative and low positive airborne altitudes. Mini parser tests passed; build and C3 flash hashes verified.
 - Seven live adsb.fi HTTP 200 requests succeeded with verified TLS 1.2, at 25 km with two aircraft (about 1.5 KiB responses). Post-request free heap remained 154,288 bytes; minimum observed heap 79,912 bytes; largest idle internal block 114,676 bytes. Radar render time 59–60 ms at a 200 ms target period. This is a short, light-traffic sample, not a full-capacity endurance benchmark.
 - Application 1,255,684 / 1,966,080 bytes (63.9% of its slot); 710,396 bytes remain in that slot. Static RAM remains 53,220 bytes. No new large buffer allocation. Ground reports were absent in this live sample; ground exclusion is covered by the targeted parser regression.
+
+## Original knob navigation and airport touch links — 4 October 2026
+
+- ESP32-S3 release build and firmware packaging passed. App image: 1,781,456
+  bytes; linker flash usage 1,781,092 / 6,553,600; static RAM 100,052 bytes.
+- Host model/input, JSON, photo/protocol and network-device checks passed.
+  Added double-click suppression, hold-turn cancellation and airport icon/label
+  hit-area checks. All 54 information-server tests passed, including explicitly
+  selecting an airport outside the nearest nine and invalid/missing targets.
+- Wireless application upload to the original at 192.168.2.151 succeeded after
+  the user unlocked Setup. Device verified the image and restarted; logs show
+  live positions, a successful feed and airport markers loading after reboot.
+- Physical single/double-click, hold-and-turn and airport touch confirmation is
+  still pending user feedback. Mini firmware was not changed or reflashed.
+- Airport targeting requires the accompanying information-server update; its
+  source is updated here, but the user's Docker host was not redeployed.

@@ -76,19 +76,27 @@ void status(const char *message) {
     if(std::strcmp(previous,message)) { deviceLog.printf("[network] %s\n",message); snprintf(previous,sizeof(previous),"%s",message); }
     lvgl_port_lock(-1); snprintf(ui::status,sizeof(ui::status),"%s",message); lvgl_port_unlock();
 }
-struct ButtonEvent { sky::ButtonDebounce::Event kind; uint32_t at; bool longPress; };
+struct ButtonEvent { sky::ButtonDebounce::Event kind; uint32_t at; bool longPress; int steps=0; bool held=false; };
 QueueHandle_t buttonQueue=nullptr;
 void sampleButton(void *) {
     sky::ButtonDebounce debounce;
     TickType_t next=xTaskGetTickCount();
+    int remainder=0; bool turned=false,wasRaw=false;
     for(;;) {
         const uint32_t now=millis();
         const auto kind=debounce.sample(digitalRead(0)==LOW,now);
-        if(kind!=sky::ButtonDebounce::None) {
-            const ButtonEvent event{kind,now,debounce.longSent};
-            // Only three events per gesture; the UI drains these between frames.
+        if(debounce.raw && !wasRaw) turned=false;
+        wasRaw=debounce.raw;
+        int rawSteps; portENTER_CRITICAL(&encoderMux); rawSteps=encoderSteps; encoderSteps=0; portEXIT_CRITICAL(&encoderMux);
+        remainder+=rawSteps; int delta=remainder/2; remainder%=2;
+        const bool held=debounce.raw || debounce.pressed;
+        if(delta && held) turned=true;
+        if(kind!=sky::ButtonDebounce::None && !(kind==sky::ButtonDebounce::Hold && turned)) {
+            const ButtonEvent event{kind,now,debounce.longSent || turned};
+            // Preserve press/rotation ordering while the UI is drawing.
             xQueueSend(buttonQueue,&event,portMAX_DELAY);
         }
+        if(delta) { const ButtonEvent event{sky::ButtonDebounce::None,now,false,delta,held}; xQueueSend(buttonQueue,&event,portMAX_DELAY); }
         vTaskDelayUntil(&next,std::max(TickType_t(1),pdMS_TO_TICKS(5)));
     }
 }
@@ -109,45 +117,53 @@ bool wakeForInput(uint32_t now,bool touch=false) {
     deviceLog.println("[power] Awake; refreshing aircraft");
     return true;
 }
+void knobSingle(uint32_t now) {
+    if(ui::pageAnimating) return;
+    if(ui::notificationUntil) ui::notificationUntil=0;
+    else if(ui::settings) ui::settings=false;
+    else if(ui::infoMenu) ui::pressInfo();
+    else if(!ui::infoView && !ui::satelliteView && !ui::model.details) { ui::radarControls.show(now); ui::model.openSelected(now); }
+}
+void knobBack(uint32_t now) {
+    if(ui::pageAnimating) return;
+    if(ui::notificationUntil) { ui::notificationUntil=0; return; }
+    if(!ui::settings && !ui::infoMenu && !ui::infoView && !ui::satelliteView && !ui::model.details) { if(ui::infoAvailable()) ui::openInfo(); return; }
+    ui::settings=false; ui::infoMenu=false; ui::infoView=0; ui::satelliteView=false; ui::routePage=false; ui::model.details=false; ui::model.refresh(now);
+}
 void controls(lv_timer_t *) {
-    constexpr int transitionsPerDetent=2; // This knob has two quadrature edges per physical click.
-    static int remainder=0;
     static bool wakeButton=false;
     const uint32_t now=millis();
-    int steps;
-    portENTER_CRITICAL(&encoderMux); steps=encoderSteps; encoderSteps=0; portEXIT_CRITICAL(&encoderMux);
-    if(steps && wakeForInput(now)) { steps=0; remainder=0; }
-    remainder+=steps;
-    if(std::abs(remainder)>=transitionsPerDetent) {
-        if(!ui::model.details && !ui::infoView && !ui::infoMenu && !ui::satelliteView && !ui::settings) ui::radarControls.rotate(now);
-        const int previousBand=ui::model.altitudeFilter; const auto previousType=ui::model.filter;
-        if(!ui::settings && !ui::pageAnimating) { if(ui::infoMenu || ui::infoView) ui::rotateInfo(remainder/transitionsPerDetent); else if(ui::satelliteView) ui::rotateStations(remainder/transitionsPerDetent); else ui::model.rotate((ui::model.details || ui::model.selectMode || ui::model.altitudeMode || ui::model.typeMode)?-remainder/transitionsPerDetent:remainder/transitionsPerDetent,now); }
-        if(previousBand!=ui::model.altitudeFilter || previousType!=ui::model.filter) ui::requestFeed=true;
-        remainder%=transitionsPerDetent;
-    }
     ButtonEvent event;
     while(xQueueReceive(buttonQueue,&event,0)==pdTRUE) {
-        if(event.kind==sky::ButtonDebounce::Down) {
-            wakeButton=wakeForInput(millis());
-            if(!wakeButton) ui::input.buttonBegin(event.at);
-        }
-        else if(event.kind==sky::ButtonDebounce::Up) {
-            wakeForInput(millis());
+        // Resolve an expired first click before processing a later queued press.
+        if(ui::input.takeClick(event.at,400)) knobSingle(now);
+        if(event.steps) {
+            if(wakeForInput(now)) { if(event.held) wakeButton=true; continue; }
+            if(wakeButton || ui::settings || ui::pageAnimating) continue;
+            const int delta=-event.steps; // clockwise-positive, matching Mini
+            if(event.held) {
+                ui::input.cancelPress();
+                if(ui::infoView) ui::turnInfoPage(delta);
+                else if(ui::model.details) ui::swipeDetails(delta<0?-1:1,now);
+                else if(!ui::infoMenu && !ui::satelliteView) { ui::model.setMode((ui::model.rotationMode()+delta%4+4)%4); ui::radarControls.show(now); }
+            } else {
+                const int previousBand=ui::model.altitudeFilter; const auto previousType=ui::model.filter;
+                if(ui::infoMenu || ui::infoView) ui::rotateInfo(event.steps);
+                else if(ui::satelliteView) ui::rotateStations(event.steps);
+                else { if(!ui::model.details) ui::radarControls.rotate(now); ui::model.rotate(delta,now); }
+                if(previousBand!=ui::model.altitudeFilter || previousType!=ui::model.filter) ui::requestFeed=true;
+            }
+        } else if(event.kind==sky::ButtonDebounce::Down) {
+            wakeButton=wakeForInput(now) || wakeButton;
+            if(!wakeButton) { ui::input.buttonBegin(event.at); if(event.longPress) ui::input.cancelPress(); }
+        } else if(event.kind==sky::ButtonDebounce::Up) {
+            wakeForInput(now);
             if(wakeButton) { wakeButton=false; continue; }
             ui::input.buttonEnd(event.at,event.longPress);
-            deviceLog.printf("[input] Button released; long=%s, touch overlap=%s\n",
-                          event.longPress?"yes":"no",(ui::input.touchedDuringPress || ui::input.touching)?"yes":"no");
-        } else if(event.kind==sky::ButtonDebounce::Hold && !wakeButton) requestPortal=true;
+            if(ui::input.takeDouble()) knobBack(now);
+        } else if(event.kind==sky::ButtonDebounce::Hold && !wakeButton) { ui::input.cancelPress(); requestPortal=true; }
     }
-    if(ui::input.takeClick(millis()) && !ui::pageAnimating) {
-        if(ui::notificationUntil) ui::notificationUntil=0;
-        else if(ui::settings) ui::settings=false;
-        else if(ui::infoMenu || ui::infoView) ui::pressInfo();
-        else if(ui::satelliteView) ui::satelliteView=false;
-        else if(ui::routePage) { ui::routePage=false; ui::model.details=false; }
-        else { ui::radarControls.show(now); ui::model.press(now); }
-        deviceLog.printf("[input] Click accepted; rotation=%s\n",ui::model.typeMode?"type":ui::model.altitudeMode?"altitude":ui::model.selectMode?"aircraft":"range");
-    }
+    if(ui::input.takeClick(millis(),400)) knobSingle(now);
     if(ui::pickupArmed && uint32_t(now-ui::pickupStarted)>=86400000u) ui::pickupArmed=false;
     const bool showingAlert=ui::notificationUntil && int32_t(ui::notificationUntil-now)>0;
     if(ui::activity.updateWatch(now)) {
@@ -187,7 +203,7 @@ void touch(lv_event_t *event) {
         wakeForInput(now,true); ui::input.touchEnd(now); gesture.move(point.x,point.y);
         consumeTap=consumeTap || gesture.moved;
         if(code==LV_EVENT_RELEASED && !wakeTouch && !longTouch && !ui::setupOpeningTouch && gesture.direction()) {
-            if(ui::infoView) { if(ui::infoView==5) ui::changeLogPage(gesture.direction()); else ui::changeInfoPage(gesture.direction()); }
+            if(ui::infoView) ui::turnInfoPage(gesture.direction());
             else ui::swipeDetails(gesture.direction(),now);
         }
         gesture.end(); return;
@@ -195,7 +211,7 @@ void touch(lv_event_t *event) {
     if(code!=LV_EVENT_SHORT_CLICKED) return;
     // LVGL can emit SHORT_CLICKED before RELEASED. Suppress a drag in either order.
     gesture.move(point.x,point.y);
-    if(wakeTouch || consumeTap || gesture.moved || ui::setupOpeningTouch || ui::pageAnimating) return;
+    if(wakeTouch || consumeTap || gesture.moved || ui::input.turned || ui::setupOpeningTouch || ui::pageAnimating) return;
     ui::tap(point.x,point.y,now);
 }
 void demoFrame(uint32_t now) {
@@ -702,7 +718,7 @@ void fetchAirports(int rangeIndex) {
         marker.size=std::min(2u,a["size"] | 2u); sky::copyText(marker.code,a["code"]);
     }
     lvgl_port_lock(-1);
-    if(ui::model.rangeIndex==rangeIndex) { std::copy(markers,markers+count,ui::airportMarkers); ui::airportCount=count; ui::airportRange=rangeIndex; }
+    if(ui::model.rangeIndex==rangeIndex) { std::copy(markers,markers+count,ui::airportMarkers); ui::airportHitCount=0; ui::airportCount=count; ui::airportRange=rangeIndex; }
     lvgl_port_unlock(); nextAirports=millis()+600000;
     deviceLog.printf("[airports] Loaded %u markers at %d km\n",count,int(sky::ranges[rangeIndex]));
 }
@@ -774,6 +790,7 @@ void fetchStations() {
 }
 void fetchInsight(int view) {
     nextInsight=millis()+30000;
+    lvgl_port_lock(-1); const String airportTarget=ui::airportTarget; lvgl_port_unlock();
     String path;
     if(view==1) path="/v1/weather?lat="+String(homeLat,4)+"&lon="+String(homeLon,4);
     else if(view==2) path="/v1/family?flight="+familyFlight+"&callsign="+familyCallsign+"&arrival="+familyArrival;
@@ -781,13 +798,14 @@ void fetchInsight(int view) {
     else if(view==4) path="/v1/stargazing?lat="+String(homeLat,4)+"&lon="+String(homeLon,4);
     else if(view==5) path="/v1/highlights";
     else return;
+    if(view==3 && airportTarget.length()) path+="&airport="+airportTarget;
     JsonDocument doc;
     const bool ok=infoJSON(path,doc);
     const int64_t generated=doc["generated"] | int64_t(0);
     const int64_t age=int64_t(time(nullptr))-generated;
     const bool fresh=age>=-30 && age<=(view==2?60:1800);
     lvgl_port_lock(-1);
-    if(ui::infoView==view) {
+    if(ui::infoView==view && (view!=3 || airportTarget==ui::airportTarget)) {
         char previousItem[48]{}; uint32_t previousEntry=0; int previousSubpage=0;
         if(ui::infoCount && ui::infoPage<int(ui::infoCount)) { snprintf(previousItem,sizeof(previousItem),"%s",ui::infoPages[ui::infoPage].item); previousEntry=ui::infoPages[ui::infoPage].entryId; for(int i=0;i<ui::infoPage;++i) if(ui::sameItem(i,ui::infoPage)) ++previousSubpage; }
         ui::infoCount=0;
@@ -818,11 +836,16 @@ void fetchInsight(int view) {
             }
             for(JsonVariantConst line:p["lines"].as<JsonArrayConst>()) { if(n>=7) break; sky::copyText(out.lines[n++],line); }
         }
+        if(view==3 && airportTarget.length() && !previousItem[0]) {
+            bool found=false;
+            for(unsigned i=0;i<ui::infoCount;++i) if(airportTarget==ui::infoPages[i].title || airportTarget==ui::infoPages[i].item) { ui::infoPage=i; found=true; break; }
+            if(!found) ui::infoCount=0;
+        }
         if(previousItem[0]) { int subpage=0,first=-1; for(unsigned i=0;i<ui::infoCount;++i) if(!strcmp(ui::infoPages[i].item,previousItem)) { if(first<0) first=i; if(subpage++==previousSubpage) { ui::infoPage=i; first=-1; break; } } if(first>=0) ui::infoPage=first; }
         if(ui::infoPage>=int(ui::infoCount)) ui::infoPage=0;
         if(view==5 && ui::infoCount && previousEntry!=ui::infoPages[ui::infoPage].entryId) ui::resetLog(true);
         if(ui::infoCount) { ui::infoReceived=millis()-uint32_t(std::max(int64_t(0),age))*1000; ui::infoGenerated=generated; sky::copyText(ui::infoSource,doc["source"]); nextInsight=millis()+(view==2?20000:view>=3?60000:900000); }
-        else snprintf(ui::infoMessage,sizeof(ui::infoMessage),view==3 && ok && fresh?"No airports match these filters":"Data unavailable / retrying");
+        else snprintf(ui::infoMessage,sizeof(ui::infoMessage),view==3 && airportTarget.length()?"Airport unavailable / update server":view==3 && ok && fresh?"No airports match these filters":"Data unavailable / retrying");
     }
     lvgl_port_unlock();
     deviceLog.printf("[info] page=%d HTTP/JSON=%d fresh=%d\n",view,ok,fresh);

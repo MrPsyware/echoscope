@@ -11,6 +11,7 @@ struct WeatherCard { char label[20]{},condition[24]{},temperature[24]{},cloud[24
 struct AirportRunway { sky::Point from,to; char name[12]{}; };
 struct AirportDetail { bool valid=false; double lat=0,lon=0; sky::Point position; AirportRunway runways[3]{}; unsigned count=0; };
 inline int airportPage=0;
+inline char airportTarget[9]{};
 struct InfoPage { AirportDetail airport{}; char item[48]{}; uint32_t entryId=0; char registration[16]{}; char title[33]{}; char lines[7][61]{}; char subtitle[48]{},note[64]{}; WeatherCard cards[3]{}; unsigned cardCount=0; };
 inline InfoPage infoPages[9]{};
 inline unsigned infoCount=0;
@@ -35,6 +36,11 @@ inline void changeInfoPage(int direction) {
         const int candidate=(infoPage+direction*step+int(infoCount)*2)%int(infoCount);
         if(sameItem(candidate,infoPage)) { infoPage=candidate; return; }
     }
+}
+inline void turnInfoPage(int direction) {
+    if(infoView==3 && infoCount && infoPages[infoPage].airport.valid) airportPage=(airportPage+direction%2+2)%2;
+    else if(infoView==5) changeLogPage(direction<0?-1:1);
+    else changeInfoPage(direction<0?-1:1);
 }
 inline void rotateInfo(int delta) {
     if(infoView) {
@@ -70,7 +76,7 @@ inline void pressInfo() {
     infoMenu=false;
     if(infoSelection==0) { satelliteView=true; return; }
     infoNeedsFetch=true;
-    airportPage=0; resetLog(); infoView=infoSelection; infoCount=0; infoPage=0; infoReceived=0;
+    airportTarget[0]=0; airportPage=0; resetLog(); infoView=infoSelection; infoCount=0; infoPage=0; infoReceived=0;
     snprintf(infoMessage,sizeof(infoMessage),"Loading...");
 }
 #include "weather_ui.h"

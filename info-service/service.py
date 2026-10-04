@@ -229,7 +229,7 @@ class Handler(BaseHTTPRequestHandler):
                 query = parse_qs(urlsplit(self.path).query)
                 if path.endswith('weather') or path.endswith('airports'):
                     lat, lon, query = extras.location(urlsplit(self.path).query)
-                    body = insights.weather(lat, lon, download) if path.endswith('weather') else insights.nearby(lat, lon, query.get('mode',['airline'])[0], query.get('size',['any'])[0])
+                    body = insights.weather(lat, lon, download) if path.endswith('weather') else insights.nearby(lat, lon, query.get('mode',['airline'])[0], query.get('size',['any'])[0], query.get('airport',[''])[0])
                 elif path.endswith('route'):
                     body = insights.route(query.get('flight', [''])[0], download)
                 else:

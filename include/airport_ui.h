@@ -6,7 +6,19 @@ inline unsigned airportCount=0,airportMode=1,airportSize=0,airportBrightness=35;
 inline uint32_t airportColor=0x9BB8CD;
 inline bool airportLabels=true,airportOverlayEnabled=false;
 inline int airportRange=-1;
+inline sky::AirportHit airportHits[32]{};
+inline unsigned airportHitCount=0;
+inline int hitAirport(int x,int y) {
+    if(!airportOverlayEnabled || !airportMode || !airportBrightness || airportRange!=model.rangeIndex) return -1;
+    int best=-1; float distance=10000;
+    for(unsigned i=0;i<airportHitCount;++i) if(airportHits[i].contains(x,y)) {
+        const auto &h=airportHits[i]; float d=std::hypot(float(x-h.x),float(y-h.y));
+        if(d<distance) { best=h.index; distance=d; }
+    }
+    return best;
+}
 inline void renderAirports() {
+    airportHitCount=0;
     if(!airportOverlayEnabled || !airportMode || !airportBrightness || airportRange!=model.rangeIndex) return;
     const auto dim=[](uint32_t c,unsigned b) { return (((c>>16)*b/100)<<16) | ((((c>>8)&255)*b/100)<<8) | ((c&255)*b/100); };
     const uint32_t color=dim(airportColor,airportBrightness);
@@ -20,6 +32,7 @@ inline void renderAirports() {
         for(unsigned j=0;j<labelCount;++j) { const auto b=labels[j]; if(p.x>=b.x-7 && p.x<=b.x+b.w+7 && p.y>=b.y-7 && p.y<=b.y+b.h+7) crowded=true; }
         if(crowded) continue;
         icons[iconCount++]=p;
+        auto &hit=airportHits[airportHitCount++]; hit={int(i),p.x,p.y,0,0,0,0};
         const int r=a.size==0?4:3;
         line(p.x-r,p.y-r,p.x+r,p.y-r,color); line(p.x+r,p.y-r,p.x+r,p.y+r,color);
         line(p.x+r,p.y+r,p.x-r,p.y+r,color); line(p.x-r,p.y+r,p.x-r,p.y-r,color);
@@ -35,6 +48,7 @@ inline void renderAirports() {
         if(box.y<249 && box.y+box.h>220 && (box.x<68 || box.x+box.w>399)) crowded=true;
         if(crowded) continue;
         labels[labelCount++]=box;
+        hit.labelX=box.x; hit.labelY=box.y; hit.labelW=box.w; hit.labelH=box.h;
         text(box.y,a.code,&lv_font_montserrat_12,color,box.x,box.w);
     }
 }

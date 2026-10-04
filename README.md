@@ -16,7 +16,7 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 ## Features
 
 - North-up radar centred on your location, with 5 / 10 / 25 / 50 / 100 km ranges.
-- Rotate to zoom or select aircraft; a bare knob press toggles the mode.
+- Rotate to zoom or select aircraft; hold and rotate to change the mode.
 - Bold, brighter footer text shows what rotation controls.
 - Touch an aircraft to see callsign, registration, type, altitude, ground speed, ground track, distance, bearing and position age where available.
 - Faint altitude-coloured flight paths, with the selected path showing historical altitude colours, thicker and brighter above other paths.
@@ -35,15 +35,26 @@ The user has confirmed the existing display, Wi-Fi, radar, touch and rotary cont
 
 | Input | Behaviour |
 |---|---|
-| Rotate on radar | Selected mode: aircraft, altitude or range; starts in aircraft mode |
-| Rotate on a detail/info view | Cycle items clockwise to next; outer ring highlights the item |
-| Tap `<` / `>` | Cycle pages within the item; arrows appear only when relevant |
-| Centre tap or short mechanical press on a detail view | Return to radar |
+| Rotate on radar | Adjust selected range / aircraft / altitude / type mode; starts in aircraft mode |
+| Rotate on a detail/info view | Next item clockwise, preserving the current page |
+| Single mechanical click | Open highlighted aircraft or selected Information entry; close setup |
+| Double mechanical click | Return to radar; from radar, open Information when available |
+| Hold and rotate on radar | Cycle Range / Aircraft / Altitude / Type modes |
+| Hold and rotate in details | Cycle the selected item's pages, including airport approach and logbook trace |
+| Tap `<` / `>` or swipe | Cycle available pages within the selected item |
+| Centre tap on a detail view | Return to radar |
 | Tap aircraft / blank radar | Open tapped / highlighted aircraft |
-| Tap bottom range / plane count / ALT | Choose rotation mode (active label is underlined) |
-| Tap bottom filter | Cycle ALL / WCH / HEL / MIL / LGT / LRG |
-| Touch and hold still for 2 seconds | Open Information; rotate and press or tap an entry to open it |
-| Hold mechanical button for 5 seconds | Open setup |
+| Tap visible airport icon or label | Open that airport's details; aircraft overlapping it take priority |
+| Tap bottom range / plane count / Alt / Type | Select mode; tap again to advance its value |
+| Touch and hold still for 2 seconds | Open Information |
+| Hold mechanical button still for 5 seconds | Open setup |
+
+Mechanical clicks wait 400 ms to distinguish a double-click, matching the Mini.
+Hold-and-turn consumes the release and does not trigger setup. Touch shortcuts
+remain available on the original; all item/page navigation also works by knob.
+Airport touch links require the updated information server (`git pull` then
+`make docker` on the server). The selected airport is included even if it falls
+outside the usual nearest-nine list.
 
 Touch and mechanical-click events remain combined into one gesture. A two-second
 screen hold consumes the release tap, so it cannot immediately close the menu.
@@ -186,14 +197,14 @@ After the configured idle period (one hour by default) without touch, press or r
 
 The [information server](info-service/README.md) runs in Docker on another LAN computer. Start it with `make docker` from the repository root (listens on `0.0.0.0:8086`), then hold the knob for 5 seconds to unlock its web setup. Enter `http://YOUR-SERVER-IP:8086` in **Info server URL**, test and save. Leaving it blank disables photos.
 
-Aircraft details automatically request the actual aircraft's thumbnail by registration when photos are enabled. The same page shows aircraft type, altitude, speed, distance/bearing, track and position age alongside the photo. Turn to select another flight; tap or press to return to radar. Photos retain photographer credit; open `http://KNOB-IP/photo` for the original-photo link. The service caches attributed thumbnails on disk for seven days; its `/cache` page clears them manually. Missing photos and unavailable servers leave the radar usable. New photo requests pause during standby, and obsolete responses are discarded. The firmware accepts only the bounded image protocol; it does not decode JPEGs. See the service README for deployment, provider and protocol details.
+Aircraft details automatically request the actual aircraft's thumbnail by registration when photos are enabled. The same page shows aircraft type, altitude, speed, distance/bearing, track and position age alongside the photo. Turn to select another flight; tap the centre or double-click to return to radar. Photos retain photographer credit; open `http://KNOB-IP/photo` for the original-photo link. The service caches attributed thumbnails on disk for seven days; its `/cache` page clears them manually. Missing photos and unavailable servers leave the radar usable. New photo requests pause during standby, and obsolete responses are discarded. The firmware accepts only the bounded image protocol; it does not decode JPEGs. See the service README for deployment, provider and protocol details.
 
 The radar radius is now 210 pixels.
 
 
 ### Altitude colours and watchlists (0.4.0)
 
-Bare clicks cycle **Range → Aircraft → Altitude → Range**. In altitude mode, rotation cycles All, below 5,000 ft, 5,000–14,999 ft, 15,000–29,999 ft, 30,000 ft and above, and unknown altitude. The selected band remains active when changing rotation mode. Filtering happens before the 64-aircraft capacity limit. Range, aircraft-class and altitude filters combine.
+Hold-and-turn cycles **Range → Aircraft → Altitude → Type → Range**. In altitude mode, rotation cycles All, below 5,000 ft, 5,000–14,999 ft, 15,000–29,999 ft, 30,000 ft and above, and unknown altitude. The selected band remains active when changing rotation mode. Filtering happens before the 64-aircraft capacity limit. Range, aircraft-class and altitude filters combine.
 
 Aircraft and their trails use green below 5,000 ft, cyan below 15,000 ft, blue below 30,000 ft and purple above; unknown altitude is muted. The selected aircraft stays orange. Its brighter, thicker trail uses each recorded point’s altitude; other trails use their aircraft’s current altitude. Stale unselected symbols are muted. Altitude is reported barometric altitude, falling back to geometric altitude when unavailable.
 
@@ -204,7 +215,7 @@ Hold for five seconds and open the displayed setup address to configure:
 - **Watchlists:** comma/space-separated types, registrations and callsigns, up to 16 entries per field. Matching ignores case; a trailing `*` matches a prefix (`B74*`, `RCH*`). `A380` also matches the ICAO `A388` code. Other type entries use feed type codes.
 - **Military/helicopter watches:** optional category switches; classifications depend on the feed's metadata.
 
-Visible watch matches have a small category-coloured ring. The configurable outer ring activates while any matching aircraft has a position no older than 20 seconds. Alerts respect the selected range and filters, stop when positions age or leave coverage, and never trigger for demo data. Watch matches receive priority when retaining the nearest 64 matching aircraft. Enable **Wake screen for watched aircraft** in setup to automatically wake on fresh visible matches. It is off by default and needs no info server. Automatic wake returns to sleep when a successful feed has no match, or after 60 seconds without confirmation during a feed failure. Interaction cancels automatic return and starts the normal idle timer. Saved watch rules and display settings survive reboot. Flight details still open by touch and return with a click/tap.
+Visible watch matches have a small category-coloured ring. The configurable outer ring activates while any matching aircraft has a position no older than 20 seconds. Alerts respect the selected range and filters, stop when positions age or leave coverage, and never trigger for demo data. Watch matches receive priority when retaining the nearest 64 matching aircraft. Enable **Wake screen for watched aircraft** in setup to automatically wake on fresh visible matches. It is off by default and needs no info server. Automatic wake returns to sleep when a successful feed has no match, or after 60 seconds without confirmation during a feed failure. Interaction cancels automatic return and starts the normal idle timer. Saved watch rules and display settings survive reboot. Flight details still open by touch and return with a double-click/centre tap.
 
 Space-station predictions are available through the optional information server; they use a separate orbital feed from aircraft data.
 
@@ -247,13 +258,13 @@ Set **Startup range** in web setup to 5, 10, 25, 50 or 100 km. The default remai
 
 The Docker companion is now **EchoScope Info Server**. Update it with `git pull` and `make docker` on your server, then update the knob firmware. The existing server URL and port work unchanged. See [server setup, sources and options](info-service/README.md).
 
-The server advertises available photos, maps and space-station predictions. Absent features disappear automatically. Flight details use their full text layout until a matching photo has loaded successfully. A faint, range-matched OpenStreetMap background includes visible attribution; a background toggle appears in setup when supported. The Information menu (hold the screen for two seconds) offers a separate station sky view only when the server has fresh orbital data. Rotate to choose ISS/Tiangong; tap or press to return. Pass times use UTC and a 10° elevation threshold; predictions do not imply naked-eye visibility.
+The server advertises available photos, maps and space-station predictions. Absent features disappear automatically. Flight details use their full text layout until a matching photo has loaded successfully. A faint, range-matched OpenStreetMap background includes visible attribution; a background toggle appears in setup when supported. The Information menu (hold the screen for two seconds) offers a separate station sky view only when the server has fresh orbital data. Rotate to choose ISS/Tiangong; tap the centre or double-click to return. Pass times use UTC and a 10° elevation threshold; predictions do not imply naked-eye visibility.
 
 The former `photo-service/` directory is now `info-service/`; `make docker` handles it. The Compose project/service IDs remain unchanged for in-place upgrades. `INFO_PORT` is the new port override; `PHOTO_PORT` still works. No external server is required for the aircraft radar.
 
 ### Family flights and weather (0.7.0)
 
-Update both the information server (`git pull` then `make docker`) and the knob firmware. Hold the screen still for two seconds to open Information. Rotate to choose an item and press or tap to open it. Inside a view, rotation changes items and side arrows change pages within the item. Centre tap or short press returns to radar. Unavailable features are hidden.
+Update both the information server (`git pull` then `make docker`) and the knob firmware. Hold the screen still for two seconds to open Information. Rotate to choose an item and press or tap to open it. Inside a view, rotation changes items and side arrows change pages within the item. Centre tap or double-click returns to radar. Unavailable features are hidden.
 
 In web setup, **Family flight** appears after the server advertises flight support (allow up to a minute after adding/changing the server URL). Enter a flight number, an optional actual callsign override and an arrival airport such as `LGW` or `EGKK` for Gatwick. Leave the flight number blank to hide this menu item. An easyJet booking number can differ from its transmitted `EZY`/`EJU`/`EZS` callsign: the free route database tries to resolve it, but an override may be needed. The example `U2123` is only a format example, not a Gatwick flight recommendation.
 
@@ -267,7 +278,7 @@ Sources: [adsb.fi](https://github.com/adsbfi/opendata), [adsbdb](https://www.ads
 
 ### Aircraft detail pages
 
-Open an aircraft as usual. The segmented outer ring indicates the selected aircraft. When a route is offered, use `<` / `>` to cycle between photo/telemetry and the route. Horizontal swipes remain supported. A centre tap or short mechanical press on either page returns to radar. Rotate to change aircraft; the selected route/details page stays open for the new aircraft. Logbook route/trace pages behave the same way.
+Open an aircraft as usual. The segmented outer ring indicates the selected aircraft. When a route is offered, use `<` / `>` to cycle between photo/telemetry and the route. Horizontal swipes remain supported. A centre tap or double-click on either page returns to radar. Rotate to change aircraft; the selected route/details page stays open for the new aircraft. Logbook route/trace pages behave the same way.
 
 The route page shows the database origin/destination and airline when known. This is not a filed flight plan with waypoints, nor confirmed operational routing or ETA. An unavailable route shows a retry status instead of another aircraft's route. Routes are prefetched while viewing details, and a route you opened stays tied to its callsign even if that aircraft leaves radar coverage.
 
@@ -309,7 +320,7 @@ as Gatwick when Airline airports is selected.
 
 Rotate to select an airport; the outer ring shows that selection. Tap `<` or `>` to
 switch between airport details and a **10 km radius**, north-up close-up radar.
-Changing airport preserves the page. Centre tap or mechanical click returns to the
+Changing airport preserves the page. Centre tap or double-click returns to the
 main radar. The airport list refreshes once per minute while open.
 
 Runway endpoints come from the daily cached OurAirports runway dataset; up to three

@@ -34,3 +34,14 @@ class AirportApproach(unittest.TestCase):
     def test_empty_filtered_list(self):
         with patch.object(i,'AIRPORT_INDEX',[self.airport(0,False)]):
             self.assertEqual(i.nearby(51,0)['pages'],[])
+
+    def test_marker_target_is_included_beyond_nearest_nine(self):
+        rows=[self.airport(n) for n in range(20)]
+        with patch.object(i,'AIRPORT_INDEX',rows),patch.object(i,'RUNWAY_INDEX',{}):
+            data=i.nearby(51,0,airport='a19')
+            self.assertEqual(data['pages'][0]['item'],'EG19')
+            self.assertEqual(len(data['pages']),9)
+            self.assertEqual(len({p['item'] for p in data['pages']}),9)
+            self.assertEqual(i.nearby(51,0,airport='EG3')['pages'][0]['title'],'A3')
+            with self.assertRaises(ValueError): i.nearby(51,0,airport='MISSING')
+            with self.assertRaises(ValueError): i.nearby(51,0,airport='A1&x=2')

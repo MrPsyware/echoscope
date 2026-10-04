@@ -1,5 +1,6 @@
 #include "radar_model.h"
 #include "input_gate.h"
+#include "airport_hit.h"
 #include "detail_gesture.h"
 #include "activity.h"
 #include "button_debounce.h"
@@ -224,5 +225,20 @@ int main() {
     gate.buttonBegin(4000); gate.buttonEnd(4100,false); gate.touchBegin(4150); gate.touchEnd(4200);
     assert(!gate.takeClick(4500));
     gate.buttonBegin(5000); gate.buttonEnd(7000,true); assert(!gate.takeClick(7300));
+    InputGate clicks;
+    clicks.buttonBegin(100); clicks.buttonEnd(160,false);
+    assert(!clicks.takeClick(559,400));
+    clicks.buttonBegin(400); clicks.buttonEnd(460,false);
+    assert(clicks.takeDouble() && !clicks.takeDouble() && !clicks.takeClick(1000,400));
+    clicks.buttonBegin(1100); clicks.cancelPress(); clicks.buttonEnd(1400,false);
+    assert(!clicks.takeClick(1900,400) && !clicks.takeDouble());
+    clicks.buttonBegin(2000); clicks.buttonEnd(2100,false); clicks.touchBegin(2150); clicks.touchEnd(2200);
+    assert(!clicks.takeClick(2600,400));
+    clicks.buttonBegin(3000); clicks.buttonEnd(3100,false); assert(clicks.takeClick(3500,400));
+    clicks.buttonBegin(3600); clicks.buttonEnd(3700,false); assert(!clicks.takeDouble() && clicks.takeClick(4100,400));
+    AirportHit airportHit{0,100,100,107,94,40,14};
+    assert(airportHit.contains(85,100) && airportHit.contains(145,100));
+    assert(!airportHit.contains(160,100) && !airportHit.contains(100,125));
+    airportHit.labelW=0; assert(!airportHit.contains(145,100));
     std::cout << "Passed: geometry, modes, visible selection, touch/button arbitration, persistent bounded trails, range/stale cleanup and clipping.\n";
 }

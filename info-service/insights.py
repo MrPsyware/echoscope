@@ -242,11 +242,19 @@ def airport_matches(a, mode, size):
     return (mode=='all' or a['scheduled']) and (size=='any' or kind=='large_airport' or (size=='medium' and kind=='medium_airport'))
 
 
-def nearby(lat, lon, mode='airline', size='any'):
+def nearby(lat, lon, mode='airline', size='any', airport=''):
     airports = AIRPORT_INDEX
     if not airports:
         raise ValueError('Airport index not ready')
     closest=sorted((a for a in airports if airport_matches(a,mode,size)),key=lambda a:distance(lat,lon,a['lat'],a['lon']))[:9]
+    if airport:
+        airport=airport.upper()
+        if not re.fullmatch(r'[A-Z0-9]{2,8}',airport):
+            raise ValueError('Invalid airport code')
+        target=next((a for a in airports if airport in (a['icao'],a['iata'])),None)
+        if target is None:
+            raise ValueError('Airport unavailable')
+        closest=[target]+[a for a in closest if a['icao']!=target['icao']][:8]
     pages=[]
     for a in closest:
         p=page(a['iata'] or a['icao'],a['name'],a['town'],number(distance(lat,lon,a['lat'],a['lon']),' km from home'),

@@ -1,4 +1,5 @@
 #pragma once
+#include "airport_hit.h"
 #include <lvgl.h>
 #include <cstdio>
 #include <atomic>
@@ -333,6 +334,12 @@ inline void tap(int x,int y,uint32_t now) {
     float east=(x-centre)*model.range()/radius, north=(centre-y)*model.range()/radius;
     int i=model.hit(east,north,25*model.range()/radius,now);
     if(i>=0) { model.select(i); model.details=true; }
-    else model.openSelected(now);
+    else {
+        const int airport=hitAirport(x,y);
+        if(airport>=0 && airportsEnabled) {
+            infoSelection=3; pressInfo();
+            snprintf(airportTarget,sizeof(airportTarget),"%s",airportMarkers[airport].code);
+        } else model.openSelected(now);
+    }
 }
 }
