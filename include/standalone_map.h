@@ -56,6 +56,7 @@ public:
         lookup=static_cast<uint32_t*>(heap_caps_malloc(420*420*4,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
         pixels=static_cast<uint16_t*>(heap_caps_calloc(420*420,2,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
         if(!lookup||!pixels) { cancel(); failed=true; message="Map memory unavailable"; return false; }
+        std::fill(pixels,pixels+420*420,mapBackground);
         return true;
     }
     bool active() const { return pixels && !ready && !failed; }

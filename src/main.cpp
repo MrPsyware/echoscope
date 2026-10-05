@@ -1087,7 +1087,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.16.0-dev.1 / standalone development");
+    deviceLog.println("EchoScope 0.16.0-dev.2 / standalone development");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);

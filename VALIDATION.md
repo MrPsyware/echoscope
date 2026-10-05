@@ -335,3 +335,12 @@ The first branch CI run exposed two pre-existing wall-clock-dependent logbook
 tests when simulated flights crossed midnight. Their fixtures now start at a
 fixed UTC noon, with a separate midnight-boundary assertion. All 55 info-service
 tests pass locally; no server runtime code changed.
+
+## 0.16.0-dev.2 — standalone map palette and circle background
+
+Matched the local RGB565 palette to the info-server renderer and initialized
+pixels outside the circular viewport to the canvas background (0x030D10), replacing
+black corner regions. Added reference palette checks for land, water, grayscale
+and primary colours. All host tests passed; original firmware build and packaging
+passed (2,033,164 bytes linker flash; 101,852 bytes static RAM). Physical visual
+confirmation is pending upload; the original currently requires Setup unlock.

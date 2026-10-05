@@ -1,6 +1,6 @@
 # Standalone original EchoScope — development branch
 
-Branch: `dev/standalone-pro`. Firmware: `0.16.0-dev.1`.
+Branch: `dev/standalone-pro`. Firmware: `0.16.0-dev.2`.
 This is development firmware for the **original ESP32-S3**, not a published
 release. Mini behaviour is unchanged. The stable release remains 0.15.0.
 

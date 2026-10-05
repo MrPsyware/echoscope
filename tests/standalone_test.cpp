@@ -28,6 +28,16 @@ int main() {
     }
     assert(!inMap(0,0)); assert(inMap(210,210));
     assert(mapZoom(51.5,5)>mapZoom(51.5,100));
+    // RGB565 reference values from the info server's NumPy map palette.
+    assert(mapBackground==0x0062);
+    assert(mapColor(255,255,255)==mapBackground);
+    assert(mapColor(0,0,0)==0x1a88);
+    assert(mapColor(128,128,128)==0x1165);
+    assert(mapColor(170,211,223)==0x08c3); // OSM water
+    assert(mapColor(242,239,233)==0x0082); // OSM land
+    assert(mapColor(255,0,0)==0x11c6);
+    assert(mapColor(0,255,0)==0x0944);
+    assert(mapColor(0,0,255)==0x1a47);
     JsonDocument raw,out;
     assert(!weatherPages(raw.as<JsonVariantConst>(),out,1700000000));
     const int64_t day=1700006400;

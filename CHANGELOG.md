@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.0-dev.2 — unreleased
+
+- Match standalone map colours to the info-server palette. Fill pixels outside the map circle with the radar background, removing the contrasting square-corner patches.
+
 ## 0.16.0-dev.1 — unreleased, original ESP32-S3
 
 - Add automatic standalone airport, weather/cloud, aircraft-route and map providers. Keep photos, stations and logbook server-only.

@@ -18,11 +18,12 @@ inline TilePixel mapPixel(double latitude,double longitude,double radius,int zoo
     return {px,py};
 }
 inline bool inMap(int x,int y) { return std::hypot(x-210.0,y-210.0)<=210; }
+// Same background and palette as info-service/extras.py::make_map.
+inline constexpr uint16_t mapBackground=uint16_t(((3>>3)<<11)|((13>>2)<<5)|(16>>3));
 inline uint16_t mapColor(unsigned r,unsigned g,unsigned b) {
-    const unsigned luminance=(r*299+g*587+b*114)/1000;
-    const unsigned shade=255-luminance;
-    // Faint green; aircraft and trails remain visually dominant.
-    r=2+shade*10/255; g=13+shade*29/255; b=11+shade*22/255;
+    const double luminance=r*0.299+g*0.587+b*0.114;
+    const double ink=(255-luminance)/255;
+    r=unsigned(3+ink*27); g=unsigned(13+ink*67); b=unsigned(16+ink*52);
     return uint16_t(((r>>3)<<11)|((g>>2)<<5)|(b>>3));
 }
 }
