@@ -25,28 +25,28 @@ inline bool enabledBy(const char *p) {
     return false;
 }
 struct Flyby {
-    std::atomic<bool> enabled{false},visible{false},pending{false};
+    std::atomic<bool> automaticEnabled{false},visible{false},pending{false};
     // Animation/schedule fields belong solely to the UI thread.
-    bool armed=false,active=false;
+    bool armed=false,active=false,manual=false;
     uint32_t next=0,started=0;
     float lane=0; int direction=1;
     static constexpr uint32_t duration=20000;
     static uint32_t interval(uint32_t random) { return 3600000u+random%7200001u; }
     void tick(uint32_t now,bool onRadar,uint32_t random) {
-        const bool allowed=enabled.load(); visible=allowed && onRadar;
-        if(!allowed) { active=armed=false; pending=false; return; }
-        if(!armed) { armed=true; next=now+interval(random); }
+        const bool automatic=automaticEnabled.load(); visible=onRadar;
         const bool requested=pending.exchange(false);
-        if(!onRadar) { active=false; if(int32_t(now-next)>=0) next=now+interval(random); return; }
+        if(!automatic) { armed=false; if(!manual) active=false; }
+        else if(!armed) { armed=true; next=now+interval(random); }
+        if(!onRadar) { active=manual=false; if(automatic && int32_t(now-next)>=0) next=now+interval(random); return; }
         if(active && uint32_t(now-started)>=duration) active=false;
-        if(requested || (!active && int32_t(now-next)>=0)) {
-            started=now; active=true; next=now+duration+interval(random);
+        if(requested || (automatic && !active && int32_t(now-next)>=0)) {
+            started=now; active=true; manual=requested; next=now+duration+interval(random);
             direction=(random&1)?1:-1; lane=(int((random>>1)%61)-30)/100.0f;
         }
     }
     // No aircraft objects, alerts, selections or telemetry are created.
     template<class Segment> void draw(uint32_t now,Segment segment) const {
-        if(!active || !enabled.load()) return;
+        if(!active) return;
         const float t=float(uint32_t(now-started))/duration;
         if(t>=1) return;
         const float cx=(-1.35f+2.7f*t)*direction,cy=lane-.22f*(t-.5f);

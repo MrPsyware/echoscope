@@ -111,7 +111,7 @@ void fetchFeed(){
     HTTPClient http;http.setConnectTimeout(7000);http.setTimeout(5000);http.useHTTP10(true);
     String url="https://opendata.adsb.fi/api/v3/lat/"+String(c.lat,6)+"/lon/"+String(c.lon,6)+"/dist/"+String(int(ceil(mini::ranges[range]/1.852)));
     const char *headers[]={"Content-Encoding","Content-Type","Retry-After"};http.collectHeaders(headers,3);
-    http.begin(client,url);http.setUserAgent("EchoScope-Mini/0.16.0-dev.3");
+    http.begin(client,url);http.setUserAgent("EchoScope-Mini/0.16.0-dev.4");
     deviceLog.printf("[feed] start range=%dkm heap=%u largest=%u\n",int(mini::ranges[range]),ESP.getFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
     int code=http.GET();bool ok=false;char reason[64]{};
     if(code==200&&(http.header("Content-Encoding").isEmpty()||http.header("Content-Encoding")=="identity")){
@@ -151,7 +151,7 @@ void networkTask(void *){
     server.on("/easter-egg",HTTP_POST,[](){
         static uint32_t last=0; static bool triggered=false;
         server.sendHeader("Cache-Control","no-store");
-        if(server.header("X-EchoScope-Fun")!="dr-evil" || !fun::enabledBy(settingsCopy().watch.calls)) { server.send(403,"text/plain","Unavailable"); return; }
+        if(server.header("X-EchoScope-Fun")!="dr-evil") { server.send(403,"text/plain","Unavailable"); return; }
         if(!evilFlyby.visible.load() || sleeping.load() || setupVisible.load()) { server.send(409,"text/plain","Open the awake radar first"); return; }
         if(triggered && uint32_t(millis()-last)<30000) { server.send(429,"text/plain","Try again in 30 seconds"); return; }
         evilFlyby.pending=true; last=millis(); triggered=true; server.send(202,"text/plain","Unidentified contact incoming");
@@ -323,7 +323,7 @@ void controls(const KnobInput &state,uint32_t now){
     previous=state;
 }
 void setup(){
-    Serial.begin(115200);delay(500);deviceLog.println("EchoScope Mini 0.16.0-dev.3 / ESP32-C3 standalone");
+    Serial.begin(115200);delay(500);deviceLog.println("EchoScope Mini 0.16.0-dev.4 / ESP32-C3 standalone");
     uint64_t mac=ESP.getEfuseMac();snprintf(apName,sizeof(apName),"EchoMini-%04X",unsigned((mac>>32)&0xffff));snprintf(apPassword,sizeof(apPassword),"%08lX",(unsigned long)esp_random());snprintf(csrf,sizeof(csrf),"%08lx%08lx%08lx%08lx",(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random());
     stateMutex=xSemaphoreCreateMutex();assert(stateMutex);input.holdMs=5000;
     pinMode(pinA,INPUT_PULLUP);pinMode(pinB,INPUT_PULLUP);pinMode(pinButton,INPUT_PULLUP);previousAB=(digitalRead(pinA)<<1)|digitalRead(pinB);
@@ -342,7 +342,7 @@ void loop(){
     KnobInput state;portENTER_CRITICAL(&inputMux);state=input;portEXIT_CRITICAL(&inputMux);selected=std::min(selected,availableAircraft()?availableAircraft()-1:0);controls(state,now);setupVisible=view==View::Setup;
     if(!sleeping&&bright!=frame.settings.brightness){bright=frame.settings.brightness;setBacklight(bright);}
     if(!sleeping&&view!=View::Setup&&frame.settings.sleepMinutes&&uint32_t(now-lastActivity)>=frame.settings.sleepMinutes*60000u)goSleep();
-    evilFlyby.enabled=fun::enabledBy(frame.settings.watch.calls);
+    evilFlyby.automaticEnabled=fun::enabledBy(frame.settings.watch.calls);
     evilFlyby.tick(now,!sleeping.load() && view==View::Radar,esp_random());
     if(!sleeping&&now-lastDraw>=200){lastDraw=now;render(now);renderMs=millis()-now;}
     if(now-lastLog>=15000){lastLog=now;deviceLog.printf("[mini] wifi=%d aircraft=%u heap=%u minimum=%u largest=%u render=%lums\n",frame.connected,frame.data.count,ESP.getFreeHeap(),ESP.getMinFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT),(unsigned long)renderMs);}

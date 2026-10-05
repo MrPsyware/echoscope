@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.0-dev.4 — unreleased, both knobs
+
+- Allow the manual flyby POST independently of the callsign-watch marker. The marker controls random appearances only; screen/page restrictions and the trigger cooldown still apply.
+
 ## 0.16.0-dev.3 — unreleased, both knobs
 
 - Add an opt-in novelty radar flyby, enabled by the reserved `dr evil` callsign-watch item, with a manual POST trigger. Keep it separate from real aircraft and never wake the display for it. See [trigger details](docs/EASTER_EGG.md).

@@ -358,3 +358,12 @@ linker flash, 101,876 bytes static RAM; Mini: 1,284,316 bytes linker flash, 68,0
 bytes static RAM. The effect uses no heap/image buffers or additional network data.
 Neither device has been flashed with this version. Physical visuals, long-duration
 appearances and POST triggering remain to be checked on both devices.
+
+## 0.16.0-dev.4 — independent manual flyby
+
+Both firmware builds and packaging pass. Original and Mini feature tests pass;
+shared tests now confirm a manual flyby renders and expires without any watchlist
+marker, does not arm random appearances, and is cancelled by leaving radar/sleep.
+Removing the marker still cancels an automatic appearance. HTTP retains the custom
+header, awake-radar requirement and 30-second manual cooldown on both devices.
+Device upload/HTTP confirmation remains pending physical Setup unlock.
