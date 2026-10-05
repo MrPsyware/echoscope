@@ -3,6 +3,10 @@
 #include <cstdio>
 #include <string>
 int main(){
+    assert(fun::enabledBy("EZY123, dr evil"));
+    assert(!mini::matches("dr evil", "DR",true));
+    assert(!mini::matches("dr evil", "EVIL",true));
+    assert(mini::matches("dr evil, EZY123", "EZY123",true));
     using namespace mini;
     assert(backlightDuty(0)==100 && backlightDuty(100)==0 && backlightDuty(25)==75 && backlightDuty(200)==0);
     assert(matches("a388, B744\nA320","A388"));assert(!matches("A388","A38"));assert(!matches(" , ",""));assert(!matches("B744","A388"));

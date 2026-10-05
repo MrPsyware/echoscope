@@ -464,7 +464,7 @@ void saveSetup() {
        !coordinate(server.arg("brightness"),5,100,newBrightness) || std::floor(newBrightness)!=newBrightness ||
        !coordinate(server.arg("sleep"),0,1440,newSleep) || std::floor(newSleep)!=newSleep ||
        types.length()>255 || regs.length()>255 || calls.length()>255 ||
-       !watches.types.set(types.c_str()) || !watches.registrations.set(regs.c_str()) || !watches.callsigns.set(calls.c_str())) {
+       !watches.types.set(types.c_str()) || !watches.registrations.set(regs.c_str()) || !watches.callsigns.set(calls.c_str(),true)) {
         server.send(400,"text/plain","Check brightness (5-100), sleep (0-1440 whole minutes), and watchlists (16 entries, 15 characters each; letters, numbers, hyphens, optional trailing *)."); return;
     }
     String newFamily=familyFlight,newCallsign=familyCallsign,newArrival=familyArrival;
@@ -525,6 +525,7 @@ void saveSetup() {
     prefs.putUInt("alert_period",newAlert.periodSeconds); prefs.putUInt("alert_effect",unsigned(newAlert.effect));
     watches.military=server.hasArg("watch_military"); watches.rotorcraft=server.hasArg("watch_rotor");
     watchTypes=types; watchRegs=regs; watchCalls=calls;
+    ui::evilFlyby.enabled=fun::enabledBy(watchCalls.c_str());
     watchMilitary=watches.military; watchRotor=watches.rotorcraft;
     startRange=unsigned(newRange); prefs.putUInt("start_range",startRange);
     sleepMinutes=unsigned(newSleep);
@@ -1087,7 +1088,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.16.0-dev.2 / standalone development");
+    deviceLog.println("EchoScope 0.16.0-dev.3 / standalone development");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
@@ -1121,7 +1122,8 @@ void setup() {
     ui::activity.wakeOnWatch=prefs.getBool("watch_wake",false);
     sleepMinutes=std::min<uint32_t>(1440,prefs.getUInt("sleep_min",60)); ui::activity.sleepAfterMs=sleepMinutes*60000;
     watchTypes=prefs.getString("watch_types",""); watchRegs=prefs.getString("watch_regs",""); watchCalls=prefs.getString("watch_calls","");
-    ui::model.watches.types.set(watchTypes.c_str()); ui::model.watches.registrations.set(watchRegs.c_str()); ui::model.watches.callsigns.set(watchCalls.c_str());
+    ui::model.watches.types.set(watchTypes.c_str()); ui::model.watches.registrations.set(watchRegs.c_str()); ui::model.watches.callsigns.set(watchCalls.c_str(),true);
+    ui::evilFlyby.enabled=fun::enabledBy(watchCalls.c_str());
     watchMilitary=prefs.getBool("watch_mil",false); watchRotor=prefs.getBool("watch_rotor",false);
     ui::model.watches.military=watchMilitary; ui::model.watches.rotorcraft=watchRotor;
     configured=prefs.getBool("set",false); ssid=prefs.getString("ssid"); password=prefs.getString("pass");
@@ -1148,8 +1150,9 @@ void setup() {
     lv_obj_add_event_cb(ui::canvas,touch,LV_EVENT_ALL,nullptr);
     ui::model.demo=!configured;
     lv_timer_create([](lv_timer_t *timer){
-        if(ui::asleep.load()) return;
         const uint32_t started=millis();
+        ui::evilFlyby.tick(started,!ui::asleep.load() && !ui::settings && !ui::model.details && !ui::infoView && !ui::infoMenu && !ui::satelliteView && !ui::pageAnimating,esp_random());
+        if(ui::asleep.load()) return;
         ui::render(started);
         const uint32_t renderMs=millis()-started;
         // LVGL timestamps a timer before its callback. Account for actual draw
@@ -1173,8 +1176,16 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(6),encoderISR,CHANGE); attachInterrupt(digitalPinToInterrupt(5),encoderISR,CHANGE);
     WiFi.mode(WIFI_STA); WiFi.setAutoReconnect(true);
     configTime(0,0,"pool.ntp.org","time.google.com");
-    const char *maintenanceHeaders[]={"X-EchoScope-Token","X-Firmware-Size","X-Firmware-MD5"};
-    server.collectHeaders(maintenanceHeaders,3);
+    const char *maintenanceHeaders[]={"X-EchoScope-Token","X-Firmware-Size","X-Firmware-MD5","X-EchoScope-Fun"};
+    server.collectHeaders(maintenanceHeaders,4);
+    server.on("/easter-egg",HTTP_POST,[](){
+        static uint32_t last=0; static bool triggered=false;
+        server.sendHeader("Cache-Control","no-store");
+        if(server.header("X-EchoScope-Fun")!="dr-evil" || !ui::evilFlyby.enabled.load()) { server.send(403,"text/plain","Unavailable"); return; }
+        if(!ui::evilFlyby.visible.load() || ui::asleep.load()) { server.send(409,"text/plain","Open the awake radar first"); return; }
+        if(triggered && uint32_t(millis()-last)<30000) { server.send(429,"text/plain","Try again in 30 seconds"); return; }
+        ui::evilFlyby.pending=true; last=millis(); triggered=true; server.send(202,"text/plain","Unidentified contact incoming");
+    });
     server.on("/api/state",HTTP_GET,apiState); server.on("/api/control",HTTP_POST,apiControl);
     server.on("/maintenance",HTTP_GET,maintenanceInfo);
     server.on("/update",HTTP_POST,finishFirmwareUpload,uploadFirmwareChunk);

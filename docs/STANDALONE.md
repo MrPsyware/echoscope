@@ -1,8 +1,9 @@
 # Standalone original EchoScope — development branch
 
-Branch: `dev/standalone-pro`. Firmware: `0.16.0-dev.2`.
+Branch: `dev/standalone-pro`. Firmware: `0.16.0-dev.3`.
 This is development firmware for the **original ESP32-S3**, not a published
-release. Mini behaviour is unchanged. The stable release remains 0.15.0.
+release. Mini also has the optional [novelty flyby](EASTER_EGG.md); its normal
+radar behaviour is unchanged. The stable release remains 0.15.0.
 
 ## Feature sources
 

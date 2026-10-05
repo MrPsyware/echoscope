@@ -17,7 +17,7 @@ const char *devicePage() {
 void apiState() {
     if(!apiAuthorized()) return;
     JsonDocument doc;
-    doc["protocol"]=1; doc["id"]=WiFi.macAddress(); doc["version"]="0.16.0-dev.2";
+    doc["protocol"]=1; doc["id"]=WiFi.macAddress(); doc["version"]="0.16.0-dev.3";
     doc["lat"]=homeLat; doc["lon"]=homeLon;
     doc["family_flight"]=familyFlight; doc["family_callsign"]=familyCallsign; doc["family_arrival"]=familyArrival;
     doc["pickup_km"]=pickupKm; doc["satellite_alerts"]=satelliteAlerts;

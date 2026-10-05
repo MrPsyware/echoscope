@@ -344,3 +344,17 @@ black corner regions. Added reference palette checks for land, water, grayscale
 and primary colours. All host tests passed; original firmware build and packaging
 passed (2,033,164 bytes linker flash; 101,852 bytes static RAM). Physical visual
 confirmation is pending upload; the original currently requires Setup unlock.
+
+## 0.16.0-dev.3 — opt-in novelty flyby, both devices
+
+Original host suite and Mini feature tests pass, including marker parsing and
+exclusion from real callsign watches. Shared scheduler tests cover disabled state,
+manual requests, 20-second lifetime, random interval bounds, leaving radar, sleeping,
+millis wrap and circular stroke clipping. A preview rendered from the actual
+vector-stroke output was inspected at both display scales.
+
+Both firmware builds and app/merged packaging passed. Original: 2,035,896 bytes
+linker flash, 101,876 bytes static RAM; Mini: 1,284,316 bytes linker flash, 68,076
+bytes static RAM. The effect uses no heap/image buffers or additional network data.
+Neither device has been flashed with this version. Physical visuals, long-duration
+appearances and POST triggering remain to be checked on both devices.

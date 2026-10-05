@@ -1,5 +1,6 @@
 #pragma once
 #include "model.h"
+#include "../../../include/evil_flyby.h"
 #include <cctype>
 #include <cstdlib>
 namespace mini {
@@ -7,10 +8,11 @@ inline unsigned backlightDuty(unsigned percent){return 100-std::min(100u,percent
 struct Airport {char code[9]{};float lon=0,lat=0;};
 struct AirportList {Airport items[32]{};unsigned count=0;};
 // Exact, case-insensitive comma/space-separated identifiers, never substring matches.
-inline bool matches(const char *list,const char *value){
+inline bool matches(const char *list,const char *value,bool secret=false){
     if(!*value)return false;
     while(*list){
         while(*list==','||std::isspace(static_cast<unsigned char>(*list)))++list;
+        if(secret) { const char *end=fun::afterMarker(list); if(end!=list) { list=end; continue; } }
         const char *start=list;while(*list&&*list!=','&&!std::isspace(static_cast<unsigned char>(*list)))++list;
         size_t n=list-start;if(n!=strlen(value))continue;
         bool equal=n>0;for(size_t i=0;i<n;++i)if(std::toupper(static_cast<unsigned char>(start[i]))!=std::toupper(static_cast<unsigned char>(value[i])))equal=false;
@@ -24,7 +26,7 @@ inline bool validWatch(const char *s){
 }
 struct Watchlist {
     char types[96]{},registrations[96]{},calls[96]{};
-    bool contains(const Aircraft &a)const{return matches(types,a.type)||matches(registrations,a.reg)||matches(calls,a.call);}
+    bool contains(const Aircraft &a)const{return matches(types,a.type)||matches(registrations,a.reg)||matches(calls,a.call,true);}
 };
 // Reject the entire edit on malformed lines, duplicate codes or overflow.
 inline bool parseAirports(const char *s,AirportList &out){

@@ -1,16 +1,18 @@
 #pragma once
 #include <array>
+#include "evil_flyby.h"
 #include <cctype>
 #include <cstring>
 namespace sky {
 struct WatchList {
     std::array<std::array<char,16>,16> entries{};
     unsigned count=0;
-    bool set(const char *text) {
+    bool set(const char *text,bool secret=false) {
         WatchList next;
         while(*text) {
             while(*text==',' || std::isspace(static_cast<unsigned char>(*text))) ++text;
             if(!*text) break;
+            if(secret) { const char *end=fun::afterMarker(text); if(end!=text) { text=end; continue; } }
             if(next.count==next.entries.size()) return false;
             unsigned n=0;
             while(*text && *text!=',' && !std::isspace(static_cast<unsigned char>(*text))) {
