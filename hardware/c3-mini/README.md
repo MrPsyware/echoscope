@@ -1,8 +1,10 @@
 # EchoScope Mini — standalone C3
 
 For the VIEWE **UEDX24240013-MD50E**, ESP32-C3 / 4 MB flash, 240×240
-GC9A01 display, rotary encoder and push button. **Release 0.15.0.** This is a
+GC9A01 display, rotary encoder and push button. **Release 0.16.0.** This is a
 separate firmware target from the 466×466 ESP32-S3 original.
+
+Both knobs support optional [radar visitors](../../docs/EASTER_EGG.md): Dr Evil, Nyan Cat, Santa and UFO, with watchlist opt-in or manual HTTP triggers. The original's new standalone maps/photos/weather are not part of Mini firmware.
 
 ## First use
 
@@ -95,14 +97,14 @@ make mini-firmware  # package images and checksums in dist/mini/
 make mini-upload PORT=/dev/ttyACM0
 ```
 
-[GitHub Releases](https://github.com/MrPsyware/echoscope/releases/tag/v0.15.0)
-provides `echoscope-mini-app-0.15.0.bin` for updates and
+[GitHub Releases](https://github.com/MrPsyware/echoscope/releases/tag/v0.16.0)
+provides `echoscope-mini-app-0.16.0.bin` for updates and
 `echoscope-mini-merged.bin` for first installation, plus `MINI-SHA256SUMS`.
 For downloaded images, using the project's Python environment:
 
 ```sh
 # Existing Mini installation: preserve settings
-.tools/venv/bin/python -m esptool --chip esp32c3 --port /dev/ttyACM0 write_flash 0x10000 echoscope-mini-app-0.15.0.bin
+.tools/venv/bin/python -m esptool --chip esp32c3 --port /dev/ttyACM0 write_flash 0x10000 echoscope-mini-app-0.16.0.bin
 # First installation only: overwrites the configuration area
 .tools/venv/bin/python -m esptool --chip esp32c3 --port /dev/ttyACM0 write_flash 0x0 echoscope-mini-merged.bin
 ```

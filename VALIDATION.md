@@ -390,3 +390,11 @@ timing and HTTP selection of the new visitors remain to be confirmed.
 - AddressSanitizer and UndefinedBehaviorSanitizer passed for decoder/cache tests and the live sample. LeakSanitizer is incompatible with this environment's ptrace sandbox, so leak detection was disabled for that run.
 - Desktop TLS 1.2 connections to `api.planespotters.net` and `t.plnspttrs.net` verified with the exact device trust roots and its ECDHE AES-128-GCM cipher options. No new certificate roots or insecure TLS mode were needed.
 - Firmware is packaged for the development branch only. Not yet flashed: on-device JPEG timing/heap, direct-provider TLS, page changes while downloading, sleep cancellation and info-server fallback still need hardware confirmation. Mini functionality is unchanged; only its version string advances with the shared development version.
+
+## 0.16.0 — release validation
+
+- Final original build passed: flash 2,056,068 / 6,553,600 bytes (31.4%), static RAM 108,348 / 327,680 bytes (33.1%). Final Mini build passed: flash 1,288,972 / 1,966,080 bytes (65.6%), static RAM 68,076 / 327,680 bytes (20.8%).
+- Original host tests, Mini input/feed/feature tests and all 55 information-server unit tests passed. Application and merged images for each chip were packaged with per-device SHA-256 manifests; image chip IDs/partition offsets are checked during packaging.
+- The preceding development commit's GitHub Actions passed all firmware, Mini and information-server/container jobs: https://github.com/MrPsyware/echoscope/actions/runs/37376714560 . Release changes update version strings, User-Agents and documentation, without changing feature logic.
+- Original dev.6 OTA was accepted and verified, then rebooted as 0.16.0-dev.6. Repeated verified-TLS HTTP 200 feed requests parsed 47–48 entries and retained 21–22 aircraft. Its configured info server remained available, so this confirms boot/feed continuity rather than on-device direct photo rendering.
+- Release notes preserve the outstanding hardware-test scope; no claim that all provider/failure/sleep permutations were physically exercised. Publishing 0.16.0 does not install the final version-labelled binaries on either knob.

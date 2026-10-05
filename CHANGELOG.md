@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.0
+
+- Original: automatically provide standalone aircraft photos, cached OSM maps, worldwide large airports/custom coordinates, route lookups and weather/cloud forecasts when no capable info server is available. Preserve feature-specific server preference.
+- Add progressive JPEG decoding and an eight-thumbnail PSRAM cache, attributed source links, bounded requests and error/rate-limit backoff. Match local map colours and circular edges to server maps.
+- Both devices: optional Dr Evil, Nyan Cat, Santa and UFO radar visitors, with callsign-watch opt-in and independent manual HTTP triggers.
+- Make logbook encounter tests independent of UTC time of day. No database migration, partition change or mandatory Docker update.
+- Publish original ESP32-S3 and Mini ESP32-C3 update/initial-install images and checksums. Full changes, limitations and upgrade instructions: [release notes](docs/releases/v0.16.0.md).
+
 ## 0.16.0-dev.6 — unreleased, original ESP32-S3
 
 - Add standalone registration photos through Planespotters.net, including progressive JPEG decoding, bounded PSRAM thumbnail caching and preserved photographer credits/source links. Prefer a capable info server and fall back when it is unavailable.

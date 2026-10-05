@@ -27,7 +27,7 @@ bool publicJSON(const String &url,JsonDocument &doc,int *httpStatus=nullptr) {
     FeedTLSClient client; const String roots=String(apiRootCA)+standaloneRootCA;
     client.setCACert(roots.c_str()); client.setHandshakeTimeout(5);
     HTTPClient http; http.setConnectTimeout(2500); http.setTimeout(4000); http.useHTTP10(true);
-    http.setUserAgent("EchoScope-standalone-dev (+https://github.com/MrPsyware/echoscope)");
+    http.setUserAgent("EchoScope/0.16.0 (+https://github.com/MrPsyware/echoscope)");
     http.begin(client,url); const int code=http.GET(); bool ok=false;
     if(httpStatus) *httpStatus=code;
     if(code==200) {
@@ -60,7 +60,7 @@ standalone::PhotoEntry *localPhoto(const char *reg) {
         FeedTLSClient client; const String roots=String(apiRootCA)+standaloneRootCA;
         client.setCACert(roots.c_str()); client.setHandshakeTimeout(5);
         HTTPClient http; http.useHTTP10(true); http.setConnectTimeout(2500); http.setTimeout(4000);
-        http.setUserAgent("EchoScope-standalone-dev (+https://github.com/MrPsyware/echoscope)");
+        http.setUserAgent("EchoScope/0.16.0 (+https://github.com/MrPsyware/echoscope)");
         http.begin(client,entry->meta.url); code=http.GET(); bool ok=false;
         if(code==200) {
             auto body=readFeedBody(http,standalone::photoDownloadLimit,4000);
@@ -128,7 +128,7 @@ bool downloadTile(const String &url,File &file) {
     FeedTLSClient client; const String roots=String(apiRootCA)+standaloneRootCA;
     client.setCACert(roots.c_str()); client.setHandshakeTimeout(5);
     HTTPClient http; http.useHTTP10(true); http.setConnectTimeout(2500); http.setTimeout(4000);
-    http.setUserAgent("EchoScope-standalone-dev (+https://github.com/MrPsyware/echoscope)");
+    http.setUserAgent("EchoScope/0.16.0 (+https://github.com/MrPsyware/echoscope)");
     http.begin(client,url); const int code=http.GET(); bool ok=false;
     if(code==200) {
         auto body=readFeedBody(http,512*1024,5000);

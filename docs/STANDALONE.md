@@ -1,9 +1,9 @@
-# Standalone original EchoScope — development branch
+# Standalone original EchoScope
 
-Branch: `dev/standalone-pro`. Firmware: `0.16.0-dev.6`.
-This is development firmware for the **original ESP32-S3**, not a published
-release. Mini also has the optional [novelty flyby](EASTER_EGG.md); its normal
-radar behaviour is unchanged. The stable release remains 0.15.0.
+Available in **0.16.0** for the original ESP32-S3. Each feature automatically uses
+a capable info server when available and otherwise uses the providers below.
+Mini retains its own smaller standalone feature set; both devices support the
+optional [radar visitors](EASTER_EGG.md).
 
 ## Feature sources
 
@@ -113,14 +113,20 @@ is unchanged. This feature is for the original ESP32-S3; Mini does not gain phot
 - TLS adds ISRG X1/X2 and GlobalSign Root R3 alongside existing GTS roots. Hostname
   and certificate verification remain enabled.
 
-## Validation before promotion
+## Validation and troubleshooting
 
 Run `make test` and `make firmware`. The host suite covers airport parsing,
 nearest/pinned selection, custom overrides, missing weather values, forecast page
-shape, route fallbacks, map coordinates and dateline wrapping.
+shape, route fallbacks, map coordinates/dateline wrapping, and bounded baseline
+and progressive JPEG decoding, resizing, attribution and cache behaviour.
 
-Physical-device testing is still required: initial cache creation; fresh and cached
-maps on all radar ranges; approach maps; render/input responsiveness during TLS;
-weather and route pages; setup save; sleep/wake; and server loss/recovery. Check
-serial/Wi-Fi logs for internal heap, map failure messages and feed cadence. Do not
-promote this branch to an official release until those checks pass.
+The development firmware ran on the original with live feeds and maps; the photo
+build also booted and resumed feeds. Direct photo decoding was verified on the
+host with a live thumbnail. A complete on-device matrix of all ranges/providers,
+photo decoding performance, server loss/recovery and sleep during downloads has
+not yet been recorded. See [validation records](../VALIDATION.md) for exact scope.
+
+For troubleshooting, check serial/Wi-Fi logs for `[photo]`, `[map]`,
+`[standalone]` and `[feed]` messages. To test direct providers, temporarily clear
+**Info server URL**, save and open the relevant page. Restore the URL to prefer
+the server again. Maps initialize on demand; they do not block radar startup.

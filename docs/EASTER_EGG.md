@@ -1,6 +1,6 @@
 # Radar visitors (original and Mini)
 
-Development firmware `0.16.0-dev.5` has four lightweight novelty flybys.
+Firmware `0.16.0` has four lightweight novelty flybys.
 For random appearances, put any combination of these items in the **callsign**
 watchlist in web setup:
 

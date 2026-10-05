@@ -1,13 +1,10 @@
 # EchoScope
 
-> **Development branch:** standalone features for the original ESP32-S3 are being tested here. See [standalone scope, setup and validation](docs/STANDALONE.md). This branch is not an official release; stable downloads remain 0.15.0.
-
-**New in 0.15.0:** shared knob navigation, selectable airport markers, and
-**EchoScope Mini** for the 240×240 ESP32-C3 knob. The Mini runs without an info
-server, with altitude-coloured trails, watchlists and built-in/custom airports.
-Its Save action now reboots cleanly, and Sleep switches the backlight fully off.
-The optional info server adds a searchable dark logbook dashboard and database
-reliability fixes. [Release notes and downloads](https://github.com/MrPsyware/echoscope/releases/tag/v0.15.0).
+**New in 0.16.0:** the original EchoScope can provide aircraft photos, maps,
+airports, routes and weather **without an info server**. An optional server still
+adds space stations, logbook, family-flight tracking and stargazing pages.
+Both the original and Mini also gain four optional radar visitors: Dr Evil,
+Nyan Cat, Santa and a UFO. [Release notes and downloads](https://github.com/MrPsyware/echoscope/releases/tag/v0.16.0).
 
 *A miniature radar station for the aircraft overhead.*
 
@@ -19,7 +16,7 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 
 ## Features
 
-This development branch also adds standalone aircraft photos, airports, weather, routes and cached maps to the original; [feature sources and setup](docs/STANDALONE.md) describe what works without Docker. Versioned sections below describe the stable releases.
+The original provides standalone aircraft photos, airports, weather, routes and cached maps; [feature sources and setup](docs/STANDALONE.md) describe what works without Docker. A capable info server takes priority automatically.
 
 - North-up radar centred on your location, with 5 / 10 / 25 / 50 / 100 km ranges.
 - Rotate to zoom or select aircraft; hold and rotate to change the mode.
@@ -29,9 +26,11 @@ This development branch also adds standalone aircraft photos, airports, weather,
 - N/E/S/W compass labels and a decorative radar sweep.
 - Local Wi-Fi/location setup, saved settings, stale-data indication and reconnection handling.
 
-Latest release: **0.15.0** for both devices. Update the Docker information server too if you use it; the Mini does not require one.
+Latest release: **0.16.0** for both devices. Update the Docker information server too if you use it; the Mini does not require one.
 
 A standalone **ESP32-C3 / 240×240 Mini** is available separately: [Mini setup and controls](hardware/c3-mini/README.md). Build/upload it with `make mini-build` / `make mini-upload`; the normal targets continue to serve the larger knob.
+
+Optional [radar visitors](docs/EASTER_EGG.md) work on both devices without an info server.
 
 ## Hardware status
 
@@ -131,8 +130,8 @@ Prebuilt images are available from [GitHub Releases](https://github.com/MrPsywar
 
 | Device | Application update | First installation | Checksums |
 |---|---|---|---|
-| Original ESP32-S3, 466×466 touch | `echoscope-app-0.15.0.bin` | `echoscope-merged.bin` | `SHA256SUMS` |
-| Mini ESP32-C3, 240×240 | `echoscope-mini-app-0.15.0.bin` | `echoscope-mini-merged.bin` | `MINI-SHA256SUMS` |
+| Original ESP32-S3, 466×466 touch | `echoscope-app-0.16.0.bin` | `echoscope-merged.bin` | `SHA256SUMS` |
+| Mini ESP32-C3, 240×240 | `echoscope-mini-app-0.16.0.bin` | `echoscope-mini-merged.bin` | `MINI-SHA256SUMS` |
 
 Use only the image for your device. Application updates retain saved settings;
 merged images are for first installation and overwrite the configuration area.
@@ -216,11 +215,11 @@ After the configured idle period (one hour by default) without touch, press or r
 
 ### Optional aircraft photos (0.3.0)
 
-**Development branch:** the original now downloads and decodes photos directly when no capable info server is available. Leaving the server URL blank enables standalone photos; see [standalone photo behaviour and caching](docs/STANDALONE.md#standalone-photos). The following describes the stable server-based implementation.
+The original downloads and decodes registration thumbnails directly from Planespotters.net when no capable info server is available. No API key is needed. Eight recent thumbnails are cached in PSRAM; see [standalone photo behaviour and caching](docs/STANDALONE.md#standalone-photos).
 
-The [information server](info-service/README.md) runs in Docker on another LAN computer. Start it with `make docker` from the repository root (listens on `0.0.0.0:8086`), then hold the knob for 5 seconds to unlock its web setup. Enter `http://YOUR-SERVER-IP:8086` in **Info server URL**, test and save. Leaving it blank disables photos.
+The optional [information server](info-service/README.md) adds a shared, persistent photo cache. Start it with `make docker` (listens on `0.0.0.0:8086`), then hold the knob for five seconds to open web setup. Enter `http://YOUR-SERVER-IP:8086` in **Info server URL**, test and save. Leave it blank for standalone operation.
 
-Aircraft details automatically request the actual aircraft's thumbnail by registration when photos are enabled. The same page shows aircraft type, altitude, speed, distance/bearing, track and position age alongside the photo. Turn to select another flight; tap the centre or double-click to return to radar. Photos retain photographer credit; open `http://KNOB-IP/photo` for the original-photo link. The service caches attributed thumbnails on disk for seven days; its `/cache` page clears them manually. Missing photos and unavailable servers leave the radar usable. New photo requests pause during standby, and obsolete responses are discarded. The firmware accepts only the bounded image protocol; it does not decode JPEGs. See the service README for deployment, provider and protocol details.
+Aircraft details automatically request the actual aircraft's thumbnail by registration when photos are enabled. The same page shows aircraft type, altitude, speed, distance/bearing, track and position age alongside the photo. Turn to select another flight; tap the centre or double-click to return to radar. Photos retain photographer credit; open `http://KNOB-IP/photo` for the original-photo link. The service caches attributed thumbnails on disk for seven days; its `/cache` page clears them manually. Missing photos and unavailable servers leave the radar usable. New photo requests pause during standby, and obsolete responses are discarded. Server thumbnails use the bounded image protocol; standalone thumbnails are decoded locally from baseline or progressive JPEGs. See the service README for deployment, provider and protocol details.
 
 The radar radius is now 210 pixels.
 
@@ -281,7 +280,7 @@ Set **Startup range** in web setup to 5, 10, 25, 50 or 100 km. The default remai
 
 The Docker companion is now **EchoScope Info Server**. Update it with `git pull` and `make docker` on your server, then update the knob firmware. The existing server URL and port work unchanged. See [server setup, sources and options](info-service/README.md).
 
-The server advertises available photos, maps and space-station predictions. Absent features disappear automatically. Flight details use their full text layout until a matching photo has loaded successfully. A faint, range-matched OpenStreetMap background includes visible attribution; a background toggle appears in setup when supported. The Information menu (hold the screen for two seconds) offers a separate station sky view only when the server has fresh orbital data. Rotate to choose ISS/Tiangong; tap the centre or double-click to return. Pass times use UTC and a 10° elevation threshold; predictions do not imply naked-eye visibility.
+The server advertises its capabilities. Photos and maps have standalone fallbacks on the original; server-only features disappear when unavailable. Flight details use their full text layout until a matching photo has loaded successfully. A faint, range-matched OpenStreetMap background includes visible attribution; a background toggle appears in setup when supported. The Information menu (hold the screen for two seconds) offers a separate station sky view only when the server has fresh orbital data. Rotate to choose ISS/Tiangong; tap the centre or double-click to return. Pass times use UTC and a 10° elevation threshold; predictions do not imply naked-eye visibility.
 
 The former `photo-service/` directory is now `info-service/`; `make docker` handles it. The Compose project/service IDs remain unchanged for in-place upgrades. `INFO_PORT` is the new port override; `PHOTO_PORT` still works. No external server is required for the aircraft radar.
 
@@ -311,7 +310,7 @@ Update both parts for the new weather cards: `git pull && make docker` on the se
 
 ## Airport overlay
 
-Under **Info server features → Airport overlay** in web setup:
+Under **Maps and airports** in web setup (size filters apply to the server dataset; standalone mode uses the built-in/custom airport list):
 
 - Airports: Off, Airline airports (default), or All airports.
 - Size: Any (default), Medium + large, or Large only.

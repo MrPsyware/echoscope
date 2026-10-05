@@ -23,7 +23,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError
 from PIL import Image
 
-USER_AGENT = 'EchoScope/0.15.0 (+https://github.com/MrPsyware/echoscope)'
+USER_AGENT = 'EchoScope/0.16.0 (+https://github.com/MrPsyware/echoscope)'
 REG = re.compile(r'[A-Z0-9][A-Z0-9-]{0,14}\Z')
 CACHE = OrderedDict()
 LOCK = threading.Lock()
