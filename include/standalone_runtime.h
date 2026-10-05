@@ -12,19 +12,24 @@ double weatherLat=NAN,weatherLon=NAN;
 uint32_t weatherAttempt=0;
 struct RouteCache { String call; JsonDocument data{&standaloneAllocator}; uint32_t until=0; bool ok=false; } routeCache[8];
 unsigned routeSlot=0;
+standalone::PhotoCache localPhotos;
+uint32_t nextLocalPhoto=0;
 
 
 void resetStandalone() {
+    localPhotos.clear(); nextLocalPhoto=0;
     localMap.cancel(); localMapKey=""; weatherCache.clear(); weatherLat=weatherLon=NAN; weatherAttempt=0;
     for(auto &cached:routeCache) { cached.call=""; cached.data.clear(); cached.until=0; }
 }
-bool publicJSON(const String &url,JsonDocument &doc) {
+bool publicJSON(const String &url,JsonDocument &doc,int *httpStatus=nullptr) {
+    if(httpStatus) *httpStatus=0;
     if(time(nullptr)<1700000000) return false;
     FeedTLSClient client; const String roots=String(apiRootCA)+standaloneRootCA;
     client.setCACert(roots.c_str()); client.setHandshakeTimeout(5);
     HTTPClient http; http.setConnectTimeout(2500); http.setTimeout(4000); http.useHTTP10(true);
     http.setUserAgent("EchoScope-standalone-dev (+https://github.com/MrPsyware/echoscope)");
     http.begin(client,url); const int code=http.GET(); bool ok=false;
+    if(httpStatus) *httpStatus=code;
     if(code==200) {
         auto body=readFeedBody(http,64*1024,5000);
         const auto error=deserializeJson(doc,body.text.c_str(),body.text.length());
@@ -33,6 +38,44 @@ bool publicJSON(const String &url,JsonDocument &doc) {
     }
     deviceLog.printf("[standalone] %s HTTP=%d\n",url.substring(0,url.indexOf('/',8)).c_str(),code);
     http.end(); return ok;
+}
+standalone::PhotoEntry *localPhoto(const char *reg) {
+    using standalone::PhotoState;
+    auto *entry=localPhotos.select(reg,millis());
+    if(!entry || (entry->state!=PhotoState::Lookup && entry->state!=PhotoState::Image)) return entry;
+    if(time(nullptr)<1700000000 || int32_t(millis()-nextLocalPhoto)<0 || ui::asleep.load()) return entry;
+    // At most one bounded network operation per loop, with a global throttle.
+    // A due live feed runs before the next metadata/image stage.
+    int code=0;
+    if(entry->state==PhotoState::Lookup) {
+        JsonDocument doc(&standaloneAllocator);
+        if(publicJSON(String("https://api.planespotters.net/pub/photos/reg/")+reg,doc,&code)) {
+            auto photos=doc["photos"].as<JsonArrayConst>();
+            if(!photos.isNull() && !photos.size()) entry->finish(PhotoState::Missing,millis());
+            else if(standalone::photoMetadata(photos[0],entry->meta)) entry->state=PhotoState::Image;
+            else entry->finish(PhotoState::Failed,millis());
+        } else entry->finish(code==404?PhotoState::Missing:PhotoState::Failed,millis());
+        deviceLog.printf("[photo] standalone metadata %s HTTP=%d state=%d\n",reg,code,int(entry->state));
+    } else {
+        FeedTLSClient client; const String roots=String(apiRootCA)+standaloneRootCA;
+        client.setCACert(roots.c_str()); client.setHandshakeTimeout(5);
+        HTTPClient http; http.useHTTP10(true); http.setConnectTimeout(2500); http.setTimeout(4000);
+        http.setUserAgent("EchoScope-standalone-dev (+https://github.com/MrPsyware/echoscope)");
+        http.begin(client,entry->meta.url); code=http.GET(); bool ok=false;
+        if(code==200) {
+            auto body=readFeedBody(http,standalone::photoDownloadLimit,4000);
+            if(body.complete) {
+                entry->packet.reset(static_cast<uint8_t*>(allocateFeedBytes(sky::photoMaxBytes)));
+                ok=standalone::decodePhoto(reinterpret_cast<const uint8_t*>(body.text.c_str()),body.text.length(),entry->meta,
+                    entry->packet.get(),sky::photoMaxBytes,entry->size);
+            }
+            deviceLog.printf("[photo] JPEG bytes=%u complete=%d decoded=%d\n",unsigned(body.text.length()),body.complete,ok);
+        }
+        http.end(); entry->finish(ok?PhotoState::Ready:PhotoState::Failed,millis());
+        deviceLog.printf("[photo] standalone image %s HTTP=%d %s\n",reg,code,ok?"ready":"unavailable");
+    }
+    nextLocalPhoto=millis()+(code==429?900000:1500);
+    return entry;
 }
 bool localWeather(JsonDocument &out) {
     const bool same=homeLat==weatherLat && homeLon==weatherLon;

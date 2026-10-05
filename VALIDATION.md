@@ -381,3 +381,12 @@ both screen sizes. The original rocket command remains compatible.
 
 Neither device has been flashed with dev.5. Physical appearance, on-device frame
 timing and HTTP selection of the new visitors remain to be confirmed.
+
+## 0.16.0-dev.6 — standalone aircraft photos
+
+- Original ESP32-S3 build passed: linker flash 2,056,200 bytes / 6,553,600-byte OTA slot (31.4%); static RAM 108,348 bytes (33.1%). Compared with dev.5, +17,032 bytes flash and +6,472 bytes static RAM. Runtime PSRAM holds up to eight 60,392-byte thumbnail packets plus bounded temporary JPEG decoding/download buffers; these runtime allocations are not included in static RAM figures.
+- `make -o deps test` passed, including new metadata/URL validation, cache expiry across millis rollover, LRU eviction, baseline/progressive JPEGs, big-endian RGB565 colours, portrait resizing, oversize/truncated/corrupt image rejection and attribution retention. Committed image fixtures are synthetic, not provider photos; CI needs no image download or Pillow dependency.
+- The same decoder successfully processed a live Planespotters.net G-UZHO progressive thumbnail, 9,278-byte JPEG → 200×135 pixels. Inspected the decoded image; mean channel difference from Pillow's decoding after RGB565 conversion was 1.93/255. Sample download and output remained in `/tmp`, not the repository.
+- AddressSanitizer and UndefinedBehaviorSanitizer passed for decoder/cache tests and the live sample. LeakSanitizer is incompatible with this environment's ptrace sandbox, so leak detection was disabled for that run.
+- Desktop TLS 1.2 connections to `api.planespotters.net` and `t.plnspttrs.net` verified with the exact device trust roots and its ECDHE AES-128-GCM cipher options. No new certificate roots or insecure TLS mode were needed.
+- Firmware is packaged for the development branch only. Not yet flashed: on-device JPEG timing/heap, direct-provider TLS, page changes while downloading, sleep cancellation and info-server fallback still need hardware confirmation. Mini functionality is unchanged; only its version string advances with the shared development version.

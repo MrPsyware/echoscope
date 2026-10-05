@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.0-dev.6 — unreleased, original ESP32-S3
+
+- Add standalone registration photos through Planespotters.net, including progressive JPEG decoding, bounded PSRAM thumbnail caching and preserved photographer credits/source links. Prefer a capable info server and fall back when it is unavailable.
+- Fetch only the visible photo-bearing page, split metadata/image work between live-feed polls, discard obsolete results and back off missing images, failures and rate limits. Keep the full text layout when no photo is ready.
+- Update setup and standalone documentation; Mini functionality and its memory use are unchanged.
+
 ## 0.16.0-dev.5 — unreleased, both knobs
 
 - Add Nyan Cat with rainbow trail, Santa with sleigh/reindeer, and a hovering UFO alongside the existing rocket. Each has a reserved callsign-watch item and independent manual HTTP trigger.

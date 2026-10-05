@@ -19,7 +19,7 @@ Aircraft data is supplied by [adsb.fi](https://adsb.fi/) over Wi-Fi. No ADS-B re
 
 ## Features
 
-This development branch also adds standalone airports, weather, routes and cached maps to the original; [feature sources and setup](docs/STANDALONE.md) describe what works without Docker. Versioned sections below describe the stable releases.
+This development branch also adds standalone aircraft photos, airports, weather, routes and cached maps to the original; [feature sources and setup](docs/STANDALONE.md) describe what works without Docker. Versioned sections below describe the stable releases.
 
 - North-up radar centred on your location, with 5 / 10 / 25 / 50 / 100 km ranges.
 - Rotate to zoom or select aircraft; hold and rotate to change the mode.
@@ -215,6 +215,8 @@ The filter stays in the bottom footer beside ALT. It no longer hides, and the no
 After the configured idle period (one hour by default) without touch, press or rotation, the panel and radar rendering turn off. Aircraft polling continues every 30 seconds, returning to the normal 5-second interval while a fresh watchlist match is visible. Request durations and error backoff can extend these intervals. Touch/knob sensing and Wi-Fi remain active; this is display standby, not ESP32 deep sleep. The first interaction wakes the display without changing settings or selection, and requests fresh aircraft data. Serial `[power]` messages mark sleep and wake.
 
 ### Optional aircraft photos (0.3.0)
+
+**Development branch:** the original now downloads and decodes photos directly when no capable info server is available. Leaving the server URL blank enables standalone photos; see [standalone photo behaviour and caching](docs/STANDALONE.md#standalone-photos). The following describes the stable server-based implementation.
 
 The [information server](info-service/README.md) runs in Docker on another LAN computer. Start it with `make docker` from the repository root (listens on `0.0.0.0:8086`), then hold the knob for 5 seconds to unlock its web setup. Enter `http://YOUR-SERVER-IP:8086` in **Info server URL**, test and save. Leaving it blank disables photos.
 

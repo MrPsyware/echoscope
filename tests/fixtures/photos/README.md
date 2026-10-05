@@ -1,0 +1,1 @@
+Synthetic JPEG fixtures generated with Pillow: red/blue baseline and progressive images, a green portrait for bounded resizing, and a 513-pixel-wide image to test rejection. No third-party photographs.

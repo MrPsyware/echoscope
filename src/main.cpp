@@ -29,6 +29,7 @@
 #include "standalone_airports.h"
 #include "standalone_json.h"
 #include "standalone_map.h"
+#include "standalone_photo.h"
 
 SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 namespace {
@@ -46,7 +47,7 @@ uint32_t photoRetryAt=0;
 char photoAttempt[16]{};
 lv_color_t *photoPixels=nullptr,*mapPixels=nullptr;
 bool capsPhotos=false,capsMaps=false,capsSatellites=false,mapWanted=true;
-bool remoteMaps=false,remoteWeather=false,remoteFlights=false,remoteAirports=false,remoteAirportOverlay=false;
+bool remotePhotos=false,remoteMaps=false,remoteWeather=false,remoteFlights=false,remoteAirports=false,remoteAirportOverlay=false;
 String customAirportText;
 standalone::CustomAirports customAirports;
 bool builtInAirports=true;
@@ -404,9 +405,9 @@ void setupPage() {
     const char *effects[]={"Off","Steady","Gentle pulse","Flash"};
     for(int i=0;i<4;++i) page+="<option value='"+String(i)+"' "+String(i==int(savedAlertStyle.effect)?"selected":"")+">"+effects[i]+"</option>";
     page+="</select><p>Brightness is relative to the display brightness. Colours also identify watch markers. With several categories present, the outer ring prioritises military, then helicopters, then other watch matches. Off hides the outer ring; markers remain.</p>";
-    page+="<fieldset><legend>Info server features</legend><p>The optional server adds photos, space stations, logbook and family-flight tracking, and can provide maps, weather, routes and airports.</p>";
+    page+="<fieldset><legend>Info server features</legend><p>The optional server adds space stations, logbook and family-flight tracking, and can provide photos, maps, weather, routes and airports.</p>";
     page+="<label>Info server URL (optional)</label><input name='photo_url' maxlength='160' placeholder='http://192.168.1.10:8086' value='"+escape(photoBase)+"'>";
-    page+="<p>Leave blank for standalone airports, weather, routes and maps. Capabilities are discovered automatically. Use your Docker server's LAN address.</p><button type='button' onclick=\"const b=this;b.disabled=true;fetch('/test-photo',{method:'POST',body:new URLSearchParams(new FormData(b.form))}).then(async r=>{document.getElementById('test-result').textContent=await r.text()}).catch(()=>{document.getElementById('test-result').textContent='Connection test failed'}).finally(()=>b.disabled=false)\">Test connection</button><p id='test-result' role='status'></p>";
+    page+="<p>Leave blank for standalone photos, airports, weather, routes and maps. Capabilities are discovered automatically. Use your Docker server's LAN address.</p><button type='button' onclick=\"const b=this;b.disabled=true;fetch('/test-photo',{method:'POST',body:new URLSearchParams(new FormData(b.form))}).then(async r=>{document.getElementById('test-result').textContent=await r.text()}).catch(()=>{document.getElementById('test-result').textContent='Connection test failed'}).finally(()=>b.disabled=false)\">Test connection</button><p id='test-result' role='status'></p>";
     if(remoteFlights) {
         page+="<h3>Family flight</h3><input type='hidden' name='family_setting' value='1'><p>Free live tracking, including beyond radar range. Booking numbers and broadcast callsigns can differ. Confirm the flight/date with the airline; no arrival or delay estimates.</p>";
         page+="<label>Flight number (blank disables)</label><input name='family_flight' maxlength='10' placeholder='U2123' value='"+escape(familyFlight)+"'>";
@@ -632,50 +633,6 @@ FeedBody readFeedBody(HTTPClient &http,size_t limit,uint32_t timeout) {
     result.elapsed=millis()-start;
     return result;
 }
-void fetchPhoto() {
-    if(photoBase.isEmpty() || !capsPhotos || !photoPixels || ui::asleep.load()) return;
-    char reg[16]{};
-    lvgl_port_lock(-1);
-    auto *selected=ui::model.selection();
-    if(ui::infoView==5 && ui::infoCount) snprintf(reg,sizeof(reg),"%s",ui::infoPages[ui::infoPage].registration);
-    else if(ui::model.details && !ui::settings && selected) snprintf(reg,sizeof(reg),"%s",selected->registration);
-    lvgl_port_unlock();
-    if(!reg[0]) return;
-    for(char c:reg) { if(!c) break; if(!isalnum(static_cast<unsigned char>(c)) && c!='-') return; }
-    if(!strcmp(photoAttempt,reg) && int32_t(millis()-photoRetryAt)<0) return;
-    snprintf(photoAttempt,sizeof(photoAttempt),"%s",reg); photoRetryAt=millis()+300000;
-    lvgl_port_lock(-1); ui::photoReady=false; snprintf(ui::photoStatus,sizeof(ui::photoStatus),"Loading photo..."); lvgl_port_unlock();
-    NetworkClient client; HTTPClient http; http.setConnectTimeout(2000); http.setTimeout(12000); http.useHTTP10(true);
-    http.begin(client,photoBase+"/v1/photo/"+reg);
-    const int code=http.GET();
-    bool ok=false,discarded=false;
-    if(code==200 && http.getSize()>=int(sky::photoHeaderSize) && http.getSize()<=int(sky::photoMaxBytes)) {
-        auto body=readFeedBody(http,sky::photoMaxBytes,5000);
-        unsigned width=0,height=0;
-        if(body.complete && sky::photoPacket(body.text.c_str(),body.text.length(),width,height)) {
-            lvgl_port_lock(-1);
-            auto *current=ui::model.selection();
-            if(!ui::asleep.load() && ((ui::infoView==5 && ui::infoCount && !strcmp(ui::infoPages[ui::infoPage].registration,reg)) || (ui::model.details && current && !strcmp(current->registration,reg)))) {
-                lv_img_cache_invalidate_src(&ui::photoImage);
-                memcpy(photoPixels,body.text.c_str()+sky::photoHeaderSize,width*height*2);
-                // Wire pixels are RGB565 big-endian, matching LV_COLOR_16_SWAP=1.
-                ui::photoImage.header.cf=LV_IMG_CF_TRUE_COLOR; ui::photoImage.header.w=width; ui::photoImage.header.h=height;
-                ui::photoImage.data=reinterpret_cast<const uint8_t*>(photoPixels); ui::photoImage.data_size=width*height*2;
-                snprintf(ui::photoReg,sizeof(ui::photoReg),"%s",reg);
-                memcpy(ui::photoCredit,body.text.c_str()+8,128); memcpy(ui::photoLink,body.text.c_str()+136,256);
-                ui::photoReady=true; ok=true;
-            } else discarded=true;
-            lvgl_port_unlock();
-        }
-    }
-    http.end();
-    if(discarded) { photoAttempt[0]=0; return; }
-    if(!ok) {
-        photoRetryAt=millis()+60000;
-        lvgl_port_lock(-1); snprintf(ui::photoStatus,sizeof(ui::photoStatus),"%s",code==404?"No photo available":"Photo service unavailable"); lvgl_port_unlock();
-    }
-    deviceLog.printf("[photo] %s HTTP=%d %s\n",reg,code,ok?"ready":"unavailable/discarded");
-}
 bool infoJSON(const String &path,JsonDocument &doc) {
     NetworkClient client; HTTPClient http;
     http.setConnectTimeout(1500); http.setTimeout(4000); http.useHTTP10(true);
@@ -691,11 +648,73 @@ bool infoJSON(const String &path,JsonDocument &doc) {
     http.end(); return ok;
 }
 #include "standalone_runtime.h"
+// Called with the UI lock held. Fetch only the visible photo-bearing page.
+void photoTarget(char (&reg)[16]) {
+    reg[0]=0;
+    if(ui::asleep.load() || ui::settings) return;
+    auto *selected=ui::model.selection();
+    if(ui::infoView==5 && ui::logPage==0 && ui::infoCount)
+        snprintf(reg,sizeof(reg),"%s",ui::infoPages[ui::infoPage].registration);
+    else if(ui::model.details && !ui::routePage && selected)
+        snprintf(reg,sizeof(reg),"%s",selected->registration);
+}
+bool publishPhoto(const char *reg,const char *packet,size_t length) {
+    unsigned width=0,height=0;
+    if(!sky::photoPacket(packet,length,width,height)) return false;
+    lvgl_port_lock(-1);
+    char current[16]; photoTarget(current);
+    const bool matches=!strcmp(current,reg);
+    if(matches) {
+        lv_img_cache_invalidate_src(&ui::photoImage);
+        memcpy(photoPixels,packet+sky::photoHeaderSize,width*height*2);
+        // Wire pixels are RGB565 big-endian, matching LV_COLOR_16_SWAP=1.
+        ui::photoImage.header.cf=LV_IMG_CF_TRUE_COLOR; ui::photoImage.header.w=width; ui::photoImage.header.h=height;
+        ui::photoImage.data=reinterpret_cast<const uint8_t*>(photoPixels); ui::photoImage.data_size=width*height*2;
+        snprintf(ui::photoReg,sizeof(ui::photoReg),"%s",reg);
+        memcpy(ui::photoCredit,packet+8,128); memcpy(ui::photoLink,packet+136,256);
+        ui::photoReady=true;
+    }
+    lvgl_port_unlock(); return matches;
+}
+void fetchPhoto() {
+    if(!capsPhotos || !photoPixels || ui::asleep.load()) return;
+    char reg[16];
+    lvgl_port_lock(-1); photoTarget(reg);
+    const bool ready=ui::photoReady && !strcmp(ui::photoReg,reg);
+    lvgl_port_unlock();
+    if(!standalone::photoRegistration(reg) || ready) return;
+    // A responding info server is preferred. A failed server request falls
+    // back on the next loop, giving the aircraft feed a chance to run first.
+    if(remotePhotos && (strcmp(photoAttempt,reg) || int32_t(millis()-photoRetryAt)>=0)) {
+        snprintf(photoAttempt,sizeof(photoAttempt),"%s",reg); photoRetryAt=millis()+60000;
+        NetworkClient client; HTTPClient http; http.setConnectTimeout(2000); http.setTimeout(4000); http.useHTTP10(true);
+        http.begin(client,photoBase+"/v1/photo/"+reg); const int code=http.GET(); bool ok=false;
+        if(code==200) {
+            auto body=readFeedBody(http,sky::photoMaxBytes,4000);
+            if(body.complete) ok=publishPhoto(reg,body.text.c_str(),body.text.length());
+        }
+        http.end();
+        if(code==404) {
+            auto *entry=localPhotos.select(reg,millis());
+            if(entry) entry->finish(standalone::PhotoState::Missing,millis());
+            photoRetryAt=millis()+900000;
+        }
+        if(code==429) nextLocalPhoto=photoRetryAt=millis()+900000;
+        deviceLog.printf("[photo] server %s HTTP=%d %s\n",reg,code,ok?"ready":"unavailable/discarded");
+        return;
+    }
+    auto *entry=localPhoto(reg);
+    if(entry && entry->state==standalone::PhotoState::Ready)
+        publishPhoto(reg,reinterpret_cast<const char*>(entry->packet.get()),entry->size);
+}
 void discoverInfo() {
     JsonDocument doc;
     const bool ok=!photoBase.isEmpty() && infoJSON("/health",doc) && doc["service"]=="echoscope-photos" && doc["protocol"]==1;
     const bool legacy=doc["capabilities"].isNull();
-    capsPhotos=ok && (legacy || doc["capabilities"]["photos"]==true);
+    const bool oldPhotos=remotePhotos;
+    remotePhotos=ok && (legacy || doc["capabilities"]["photos"]==true);
+    capsPhotos=photoPixels!=nullptr;
+    if(oldPhotos!=remotePhotos) { photoAttempt[0]=0; photoRetryAt=0; }
     const bool oldMaps=remoteMaps,oldAirports=remoteAirports,oldOverlay=remoteAirportOverlay,oldWeather=remoteWeather,oldFlights=remoteFlights;
     remoteMaps=ok && doc["capabilities"]["maps"]==true;
     capsMaps=mapPixels!=nullptr;
@@ -1088,7 +1107,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.16.0-dev.5 / standalone development");
+    deviceLog.println("EchoScope 0.16.0-dev.6 / standalone development");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);

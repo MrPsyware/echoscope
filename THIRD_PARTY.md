@@ -11,3 +11,6 @@ The original EchoScope (formerly Sky Knob) application is MIT licensed. The foll
 - Root certificates: Google Trust Services Roots R1 and R4, obtained from https://pki.goog/repo/certs/gtsr1.pem and https://pki.goog/repo/certs/gtsr4.pem.
 
 MatixYo/ESP32-Plane-Radar was consulted for its public feed URL and behaviour. No application source was copied from that project.
+
+- `include/vendor/stb_image.h`: stb_image 2.30, Sean Barrett and contributors, used under the MIT option in its embedded dual licence. Unmodified file from https://github.com/nothings/stb/blob/013ac3beddff3dbffafd5177e7972067cd2b5083/stb_image.h ; SHA-256 `594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3`. Only the JPEG decoder is compiled, with bounded dimensions and PSRAM allocators on ESP32-S3.
+- Aircraft photo thumbnails: Planespotters.net and their respective photographers. The photographer credit and original-photo link travel with every thumbnail; no third-party photos are included in the repository's synthetic decoder test fixtures.
