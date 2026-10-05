@@ -7,6 +7,10 @@ int main(){
     assert(!mini::matches("dr evil", "DR",true));
     assert(!mini::matches("dr evil", "EVIL",true));
     assert(mini::matches("dr evil, EZY123", "EZY123",true));
+    assert(fun::enabledBy("nyan cat, santa, ufo")==14);
+    assert(!mini::matches("nyan cat, santa, ufo", "SANTA",true));
+    assert(!mini::matches("nyan cat, santa, ufo", "NYAN",true));
+    assert(mini::matches("nyan cat, santa, ufo, BAW123", "BAW123",true));
     using namespace mini;
     assert(backlightDuty(0)==100 && backlightDuty(100)==0 && backlightDuty(25)==75 && backlightDuty(200)==0);
     assert(matches("a388, B744\nA320","A388"));assert(!matches("A388","A38"));assert(!matches(" , ",""));assert(!matches("B744","A388"));

@@ -339,10 +339,10 @@ inline void render(uint32_t now) {
         const bool selected=!selectedAirport[0] && !std::strcmp(a.hex,model.selected);
         drawAircraft(a,screen(a.position),selected,now);
     }
-    evilFlyby.draw(now,[](float x,float y,float xx,float yy,unsigned level) {
-        line(centre+int(x*radius),centre+int(y*radius),centre+int(xx*radius),centre+int(yy*radius),green,2,level*255/100);
+    evilFlyby.draw(now,[](float x,float y,float xx,float yy,uint32_t color,unsigned level) {
+        line(centre+int(x*radius),centre+int(y*radius),centre+int(xx*radius),centre+int(yy*radius),color,2,level*255/100);
     });
-    if(evilFlyby.active) text(112,"UNIDENTIFIED",&lv_font_montserrat_12,green);
+    if(evilFlyby.active) text(112,fun::label(evilFlyby.kind),&lv_font_montserrat_12,green);
     if(selectedAirport[0]) { char caption[32];snprintf(caption,sizeof(caption),"AIRPORT %s",selectedAirport);text(80,caption,&lv_font_montserrat_18,amber); }
     else if(model.demo) text(84,"DEMO",&lv_font_montserrat_14,muted);
     if(drawMap) drawMapAttribution(radarControls.visible(now)?383:401);

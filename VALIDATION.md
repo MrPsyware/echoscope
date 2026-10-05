@@ -367,3 +367,17 @@ marker, does not arm random appearances, and is cancelled by leaving radar/sleep
 Removing the marker still cancels an automatic appearance. HTTP retains the custom
 header, awake-radar requirement and 30-second manual cooldown on both devices.
 Device upload/HTTP confirmation remains pending physical Setup unlock.
+
+## 0.16.0-dev.5 — Nyan Cat, Santa and UFO
+
+Both firmware builds and packaging pass: original linker flash 2,039,168 bytes,
+static RAM 101,876 bytes; Mini linker flash 1,288,980 bytes, static RAM 68,076 bytes.
+Original host suite and Mini feature tests pass. Shared checks cover all four
+reserved watch items, HTTP names, enabled-mask selection, manual requests without
+watch items, duration, sleep/page cancellation, wraparound and coloured stroke
+clipping across both travel directions and multiple positions throughout each
+animation. Previews generated from the production stroke output were inspected at
+both screen sizes. The original rocket command remains compatible.
+
+Neither device has been flashed with dev.5. Physical appearance, on-device frame
+timing and HTTP selection of the new visitors remain to be confirmed.

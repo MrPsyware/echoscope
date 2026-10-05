@@ -525,7 +525,7 @@ void saveSetup() {
     prefs.putUInt("alert_period",newAlert.periodSeconds); prefs.putUInt("alert_effect",unsigned(newAlert.effect));
     watches.military=server.hasArg("watch_military"); watches.rotorcraft=server.hasArg("watch_rotor");
     watchTypes=types; watchRegs=regs; watchCalls=calls;
-    ui::evilFlyby.automaticEnabled=fun::enabledBy(watchCalls.c_str());
+    ui::evilFlyby.automaticMask=fun::enabledBy(watchCalls.c_str());
     watchMilitary=watches.military; watchRotor=watches.rotorcraft;
     startRange=unsigned(newRange); prefs.putUInt("start_range",startRange);
     sleepMinutes=unsigned(newSleep);
@@ -1088,7 +1088,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.16.0-dev.4 / standalone development");
+    deviceLog.println("EchoScope 0.16.0-dev.5 / standalone development");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
@@ -1123,7 +1123,7 @@ void setup() {
     sleepMinutes=std::min<uint32_t>(1440,prefs.getUInt("sleep_min",60)); ui::activity.sleepAfterMs=sleepMinutes*60000;
     watchTypes=prefs.getString("watch_types",""); watchRegs=prefs.getString("watch_regs",""); watchCalls=prefs.getString("watch_calls","");
     ui::model.watches.types.set(watchTypes.c_str()); ui::model.watches.registrations.set(watchRegs.c_str()); ui::model.watches.callsigns.set(watchCalls.c_str(),true);
-    ui::evilFlyby.automaticEnabled=fun::enabledBy(watchCalls.c_str());
+    ui::evilFlyby.automaticMask=fun::enabledBy(watchCalls.c_str());
     watchMilitary=prefs.getBool("watch_mil",false); watchRotor=prefs.getBool("watch_rotor",false);
     ui::model.watches.military=watchMilitary; ui::model.watches.rotorcraft=watchRotor;
     configured=prefs.getBool("set",false); ssid=prefs.getString("ssid"); password=prefs.getString("pass");
@@ -1181,10 +1181,11 @@ void setup() {
     server.on("/easter-egg",HTTP_POST,[](){
         static uint32_t last=0; static bool triggered=false;
         server.sendHeader("Cache-Control","no-store");
-        if(server.header("X-EchoScope-Fun")!="dr-evil") { server.send(403,"text/plain","Unavailable"); return; }
+        const auto effect=fun::fromHeader(server.header("X-EchoScope-Fun").c_str());
+        if(effect==fun::Kind::None) { server.send(403,"text/plain","Unavailable"); return; }
         if(!ui::evilFlyby.visible.load() || ui::asleep.load()) { server.send(409,"text/plain","Open the awake radar first"); return; }
         if(triggered && uint32_t(millis()-last)<30000) { server.send(429,"text/plain","Try again in 30 seconds"); return; }
-        ui::evilFlyby.pending=true; last=millis(); triggered=true; server.send(202,"text/plain","Unidentified contact incoming");
+        ui::evilFlyby.pending=uint8_t(effect); last=millis(); triggered=true; server.send(202,"text/plain","Unidentified contact incoming");
     });
     server.on("/api/state",HTTP_GET,apiState); server.on("/api/control",HTTP_POST,apiControl);
     server.on("/maintenance",HTTP_GET,maintenanceInfo);

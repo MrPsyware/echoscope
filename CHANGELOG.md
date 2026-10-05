@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.16.0-dev.5 — unreleased, both knobs
+
+- Add Nyan Cat with rainbow trail, Santa with sleigh/reindeer, and a hovering UFO alongside the existing rocket. Each has a reserved callsign-watch item and independent manual HTTP trigger.
+- Randomly select among enabled visitors, retaining one animation at a time, sleep/page cancellation and the shared manual cooldown. All visitors stay separate from real aircraft data.
+
 ## 0.16.0-dev.4 — unreleased, both knobs
 
 - Allow the manual flyby POST independently of the callsign-watch marker. The marker controls random appearances only; screen/page restrictions and the trigger cooldown still apply.
