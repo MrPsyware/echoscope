@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.17.0-dev.1 — unreleased, both knobs
+
+- Show local website / setup Wi-Fi QR codes on both Setup screens; turn the knob to switch hotspot codes.
+- Add a shared mobile interface with Watchlist, Display and Settings sections, friendly watch names, type presets, enable/disable and independent watchlist saves. Preserve existing raw matching and settings.
+- Add a Wi-Fi-only first step, explicit town/full-UK-postcode searches, optional confirmation map and manual-coordinate fallback. No app, Docker or GPS permissions required.
+- Add browser regression checks, validated editor metadata and bounded QR rendering tests. See [phone setup guide](docs/MOBILE_SETUP.md).
+
 ## 0.16.0
 
 - Original: automatically provide standalone aircraft photos, cached OSM maps, worldwide large airports/custom coordinates, route lookups and weather/cloud forecasts when no capable info server is available. Preserve feature-specific server preference.

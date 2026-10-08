@@ -1,5 +1,7 @@
 # EchoScope
 
+> Development branch: [phone setup, QR access and the watchlist editor](docs/MOBILE_SETUP.md) are being tested for both knobs. Stable downloads remain 0.16.0.
+
 **New in 0.16.0:** the original EchoScope can provide aircraft photos, maps,
 airports, routes and weather **without an info server**. An optional server still
 adds space stations, logbook, family-flight tracking and stargazing pages.

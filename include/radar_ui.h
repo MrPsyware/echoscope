@@ -1,4 +1,5 @@
 #pragma once
+#include "setup_qr.h"
 #include "airport_hit.h"
 #include "radar_selection.h"
 #include <lvgl.h>
@@ -33,6 +34,8 @@ inline uint32_t stationReceived=0;
 inline void rotateStations(int delta) { if(stationCount) stationIndex=((stationIndex-delta)%int(stationCount)+int(stationCount))%int(stationCount); }
 
 inline std::atomic<bool> asleep{false};
+inline setupui::QR setupQR;
+inline bool setupWiFiCode=true;
 inline bool settings=false,setupOpeningTouch=false,setupConnected=false;
 inline char setupSSID[33]{};
 inline std::atomic<bool> requestFeed{false};
@@ -215,18 +218,20 @@ inline void render(uint32_t now) {
     model.refresh(now);
     lv_canvas_fill_bg(canvas,lv_color_hex(0x030D10),LV_OPA_COVER);
     if(settings) {
-        text(70,"SETUP",&lv_font_montserrat_28,green);
-        text(126,setupConnected?"Connected to Wi-Fi":"Join Wi-Fi network",&lv_font_montserrat_18,muted);
-        text(155,setupConnected?setupSSID:"EchoScope-Setup",&lv_font_montserrat_20,white,63,340);
-        if(setupConnected) {
-            text(229,"Setup access point is off",&lv_font_montserrat_16,muted);
-        } else {
-            text(204,"Wi-Fi password",&lv_font_montserrat_16,muted);
-            text(229,setupPassword,&lv_font_montserrat_24);
-        }
-        text(279,"Open in your browser",&lv_font_montserrat_16,muted);
-        text(306,setupAddress,&lv_font_montserrat_22,green);
-        text(370,"Press or tap to return",&lv_font_montserrat_16,muted);
+        const bool wifi=!setupConnected && setupWiFiCode;
+        text(48,wifi?"1. JOIN WI-FI":"MANAGE ECHOSCOPE",&lv_font_montserrat_24,green);
+        text(86,setupConnected?setupSSID:wifi?"EchoScope-Setup":"2. OPEN SETUP",&lv_font_montserrat_18,white,63,340);
+        char payload[160];
+        if(wifi) std::snprintf(payload,sizeof(payload),"WIFI:T:WPA;S:EchoScope-Setup;P:%s;;",setupPassword);
+        else std::snprintf(payload,sizeof(payload),"http://%s/",setupAddress);
+        setupQR.prepare(payload);
+        setupQR.draw(233,127,214,[](int x,int y,int w,int h,bool white){
+            lv_draw_rect_dsc_t d; lv_draw_rect_dsc_init(&d); d.bg_color=lv_color_hex(white?0xffffff:0); d.bg_opa=LV_OPA_COVER; d.border_width=0; d.radius=0;
+            lv_canvas_draw_rect(canvas,x,y,w,h,&d);
+        });
+        text(352,wifi?setupPassword:setupAddress,&lv_font_montserrat_20,green);
+        text(384,setupConnected?"Phone must use the same Wi-Fi":"Turn knob: Wi-Fi / website QR",&lv_font_montserrat_16,muted);
+        text(410,"Scan with phone / press to return",&lv_font_montserrat_14,muted);
         return;
     }
     if(notificationUntil && int32_t(notificationUntil-now)>0) {

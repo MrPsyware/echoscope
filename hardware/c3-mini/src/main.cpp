@@ -15,6 +15,9 @@
 #include "../../../include/api_ca.h"
 #include "decoder.h"
 #include "mini_features.h"
+#include "../../../include/setup_qr.h"
+#include "../../../include/watch_editor.h"
+#include "../../../include/mobile_setup_assets.h"
 using esp_panel::board::Board;
 constexpr int pinA=7,pinB=6,pinButton=9,W=240,H=240,stripHeight=16;
 Board *board;uint16_t *pixels;int stripY;
@@ -43,7 +46,7 @@ Settings settingsCopy(){Lock lock;return shared.settings;}
 String airportText(const mini::AirportList &list){String s;for(unsigned i=0;i<list.count;++i){const auto &a=list.items[i];s+=String(a.code)+": "+String(a.lon,6)+"/"+String(a.lat,6)+"\n";}return s;}
 void webRoot(){
     Settings c=settingsCopy();
-    String body=F("<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>EchoScope Mini setup</title><style>body{font:17px system-ui;background:#030d10;color:#e8f8f4;max-width:580px;margin:30px auto;padding:20px}label{display:block;margin:16px 0}input,select,button,textarea{box-sizing:border-box;width:100%;padding:12px;font:inherit;background:#132b2d;color:#e8f8f4;border:1px solid #43665a;border-radius:8px}button{background:#68f3ae;color:#03140e}p{color:#afc6bd}h2{margin-top:32px}textarea{min-height:180px}input[type=checkbox]{width:auto}a{color:#68f3ae}</style><h1>EchoScope Mini</h1><p>A standalone radar for nearby aircraft. Connect to 2.4 GHz Wi-Fi and set the centre of your radar.</p><form method='post' action='/save'><input type='hidden' name='token' value='");
+    String body=F("<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>EchoScope Mini setup</title><style>body{font:17px system-ui;background:#030d10;color:#e8f8f4;max-width:580px;margin:30px auto;padding:20px}label{display:block;margin:16px 0}input,select,button,textarea{box-sizing:border-box;width:100%;padding:12px;font:inherit;background:#132b2d;color:#e8f8f4;border:1px solid #43665a;border-radius:8px}button{background:#68f3ae;color:#03140e}p{color:#afc6bd}h2{margin-top:32px}textarea{min-height:180px}input[type=checkbox]{width:auto}a{color:#68f3ae}</style><h1>EchoScope Mini</h1><p>A standalone radar for nearby aircraft. Connect to 2.4 GHz Wi-Fi and set the centre of your radar.</p><form method='post' action='/save'><input type='hidden' name='token' value='");
     body+=csrf;body+=F("'><h2>Wi-Fi and location</h2><label>Wi-Fi name<input name='ssid' maxlength='32' required value='");body+=html(c.ssid);
     body+=F("'></label><label>Wi-Fi password<input type='password' name='password' maxlength='63' autocomplete='new-password' placeholder='Leave blank to keep saved password'></label><label><input style='width:auto' type='checkbox' name='open'> This network has no password</label><label>Latitude<input name='lat' type='number' step='any' min='-85' max='85' required value='");
     if(c.configured)body+=String(c.lat,6);
@@ -58,6 +61,8 @@ void webRoot(){
     body+="<label>Alert ring brightness (%; 0 disables)<input name='alert' type='number' min='0' max='100' value='"+String(c.alertBrightness)+"'></label><h2>Airport markers</h2><p>Dim airport icons and codes are drawn beneath aircraft. No info server is needed.</p><label>Airport list<select name='airports'>";
     const char *modes[]={"Off","Built-in UK major airports","Custom list"};for(unsigned i=0;i<3;++i)body+="<option value='"+String(i)+"'"+(i==c.airportMode?" selected":"")+">"+modes[i]+"</option>";
     body+="</select></label><label>Custom airports (up to 32)<textarea name='airportList' maxlength='2048' placeholder='LGW: -0.190278/51.148102'>"+html(airportText(c.airports))+"</textarea></label><p>One per line: CODE: longitude/latitude. Negative longitude is west. Codes can contain 2–8 letters/digits. Custom replaces the UK list; select Built-in UK to restore it. Built-in coordinates: OurAirports, public domain.</p><button>Save and connect</button></form><p>Rotate: select aircraft. Click: details. Double-click: back/menu. Hold and turn: change mode/page. Hold 5 seconds: setup.</p>";
+    body.replace("<form method='post' action='/save'>",String("<form method='post' action='/save' data-device='mini' data-configured='")+(c.configured?"1":"0")+"'><input type='hidden' name='watch_ui' value='"+html(prefs.getString("watch_ui",""))+"'>");
+    body+="<link rel='stylesheet' href='/setup.css'><script src='/setup.js' defer></script>";
     server.sendHeader("Cache-Control","no-store");server.send(200,"text/html",body);
 }
 bool numeric(const String &s,double &out){if(!s.length())return false;char *end;out=strtod(s.c_str(),&end);return *end==0&&std::isfinite(out);}
@@ -72,12 +77,14 @@ void saveSettings(){
     else if(password.length()<8||password.length()>63){server.send(400,"text/plain","Enter an 8-63 character Wi-Fi password, or select the open-network option.");return;}
     double airportMode,alert;
     String types=server.arg("types"),registrations=server.arg("registrations"),calls=server.arg("calls"),airports=server.arg("airportList");
+    if(!setupui::watchMetadata(server.arg("watch_ui").c_str(),types.c_str(),registrations.c_str(),calls.c_str(),false)){server.send(400,"text/plain","Check watch names and identifiers.");return;}
     if(!mini::validWatch(types.c_str())||!mini::validWatch(registrations.c_str())||!mini::validWatch(calls.c_str())||
        !numeric(server.arg("airports"),airportMode)||airportMode<0||airportMode>2||airportMode!=int(airportMode)||
        !numeric(server.arg("alert"),alert)||alert<0||alert>100||airports.length()>2048||!mini::parseAirports(airports.c_str(),c.airports)||
        (airportMode==2&&!c.airports.count)){server.send(400,"text/plain","Check watchlists, alert brightness and airports. Use CODE: longitude/latitude, one per line, up to 32 unique airports.");return;}
     snprintf(c.watch.types,sizeof(c.watch.types),"%s",types.c_str());snprintf(c.watch.registrations,sizeof(c.watch.registrations),"%s",registrations.c_str());snprintf(c.watch.calls,sizeof(c.watch.calls),"%s",calls.c_str());
     c.airportMode=unsigned(airportMode);c.alertBrightness=unsigned(alert);c.trails=server.hasArg("trails");
+    prefs.putString("watch_ui",server.arg("watch_ui"));
     prefs.putString("watchTypes",c.watch.types);prefs.putString("watchRegs",c.watch.registrations);prefs.putString("watchCalls",c.watch.calls);
     prefs.putUInt("airportMode",c.airportMode);prefs.putString("airports",airportText(c.airports));prefs.putUInt("alert",c.alertBrightness);prefs.putBool("trails",c.trails);
     snprintf(c.ssid,sizeof(c.ssid),"%s",ssid.c_str());snprintf(c.password,sizeof(c.password),"%s",password.c_str());c.lat=lat;c.lon=lon;c.range=int(range);c.brightness=unsigned(bright);c.sleepMinutes=unsigned(sleep);c.configured=true;
@@ -90,6 +97,25 @@ void saveSettings(){
     // feed or reconfigure Wi-Fi under an existing TLS/network state.
     restartAt=millis()+1000;status("SAVED / RESTARTING");
     deviceLog.println("[setup] Settings saved; restarting");
+}
+void saveWatchlist(){
+    if(server.arg("token")!=csrf){server.send(403,"text/plain","Reload setup and try again.");return;}
+    const String types=server.arg("types"),regs=server.arg("registrations"),calls=server.arg("calls"),metadata=server.arg("watch_ui");
+    if(!mini::validWatch(types.c_str())||!mini::validWatch(regs.c_str())||!mini::validWatch(calls.c_str())||!setupui::watchMetadata(metadata.c_str(),types.c_str(),regs.c_str(),calls.c_str(),false)){server.send(400,"text/plain","Check watchlist: each active category fits 95 characters; Mini uses exact identifiers.");return;}
+    prefs.putString("watchTypes",types);prefs.putString("watchRegs",regs);prefs.putString("watchCalls",calls);prefs.putString("watch_ui",metadata);
+    {Lock lock;auto &w=shared.settings.watch;snprintf(w.types,sizeof(w.types),"%s",types.c_str());snprintf(w.registrations,sizeof(w.registrations),"%s",regs.c_str());snprintf(w.calls,sizeof(w.calls),"%s",calls.c_str());}
+    refreshRequested=true;server.send(200,"text/plain","Watchlist saved");
+}
+void saveNetwork(){
+    if(server.arg("token")!=csrf){server.send(403,"text/plain","Reload setup and try again.");return;}
+    Settings c=settingsCopy();String name=server.arg("ssid"),pass=server.arg("password");
+    if(server.hasArg("open"))pass="";else if(!pass.length()&&name==c.ssid)pass=c.password;
+    else if(pass.length()<8){server.send(400,"text/plain","Enter the Wi-Fi password, or select the open-network option.");return;}
+    if(!name.length()||name.length()>32||pass.length()>63){server.send(400,"text/plain","Check Wi-Fi name and password.");return;}
+    snprintf(c.ssid,sizeof(c.ssid),"%s",name.c_str());snprintf(c.password,sizeof(c.password),"%s",pass.c_str());
+    prefs.putString("ssid",name);prefs.putString("pass",pass);{Lock lock;shared.settings=c;}
+    server.send(200,"text/plain","Wi-Fi saved. Scan the new website QR after connecting.");
+    restartAt=millis()+1000;
 }
 class FeedSink:public Stream {
 public:
@@ -111,7 +137,7 @@ void fetchFeed(){
     HTTPClient http;http.setConnectTimeout(7000);http.setTimeout(5000);http.useHTTP10(true);
     String url="https://opendata.adsb.fi/api/v3/lat/"+String(c.lat,6)+"/lon/"+String(c.lon,6)+"/dist/"+String(int(ceil(mini::ranges[range]/1.852)));
     const char *headers[]={"Content-Encoding","Content-Type","Retry-After"};http.collectHeaders(headers,3);
-    http.begin(client,url);http.setUserAgent("EchoScope-Mini/0.16.0");
+    http.begin(client,url);http.setUserAgent("EchoScope-Mini/0.17.0-dev.1");
     deviceLog.printf("[feed] start range=%dkm heap=%u largest=%u\n",int(mini::ranges[range]),ESP.getFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT));
     int code=http.GET();bool ok=false;char reason[64]{};
     if(code==200&&(http.header("Content-Encoding").isEmpty()||http.header("Content-Encoding")=="identity")){
@@ -157,9 +183,13 @@ void networkTask(void *){
         if(triggered && uint32_t(millis()-last)<30000) { server.send(429,"text/plain","Try again in 30 seconds"); return; }
         evilFlyby.pending=uint8_t(effect); last=millis(); triggered=true; server.send(202,"text/plain","Unidentified contact incoming");
     });
+    server.on("/setup.css",HTTP_GET,[](){server.sendHeader("Cache-Control","no-store");server.send_P(200,"text/css; charset=utf-8",setup_css);});
+    server.on("/setup.js",HTTP_GET,[](){server.sendHeader("Cache-Control","no-store");server.send_P(200,"application/javascript; charset=utf-8",setup_js);});
+    server.on("/watchlist",HTTP_POST,saveWatchlist);server.on("/network",HTTP_POST,saveNetwork);
     server.on("/",HTTP_GET,webRoot);server.on("/save",HTTP_POST,saveSettings);
     server.onNotFound([](){server.sendHeader("Location","/",true);server.send(302,"text/plain","");});server.begin();
-    if(c.configured){WiFi.begin(c.ssid,c.password);status("CONNECTING WIFI");}else{startAP();status("SETUP REQUIRED");setupRequested=true;}
+    if(c.ssid[0]){WiFi.begin(c.ssid,c.password);status("CONNECTING WIFI");}else{startAP();status("SETUP REQUIRED");setupRequested=true;}
+    if(!c.configured)setupRequested=true;
     connectStarted=millis();nextReconnect=connectStarted+20000;
     for(;;){
         server.handleClient();
@@ -169,7 +199,7 @@ void networkTask(void *){
         if(connected&&apActive){dns.stop();WiFi.softAPdisconnect(true);WiFi.mode(WIFI_STA);apActive=false;deviceLog.println("[wifi] Connected; setup AP stopped");}
         if(!connected){
             if(!c.configured||uint32_t(now-connectStarted)>=20000)startAP();
-            if(c.configured&&int32_t(now-nextReconnect)>=0){WiFi.disconnect(false,false);WiFi.begin(c.ssid,c.password);nextReconnect=now+20000;}
+            if(c.ssid[0]&&int32_t(now-nextReconnect)>=0){WiFi.disconnect(false,false);WiFi.begin(c.ssid,c.password);nextReconnect=now+20000;}
             status(c.configured?"WIFI RECONNECTING":"SETUP REQUIRED");
         }else connectStarted=now;
         {Lock lock;shared.connected=connected;shared.ap=apActive;snprintf(shared.ip,sizeof(shared.ip),"%s",(connected?WiFi.localIP():WiFi.softAPIP()).toString().c_str());snprintf(shared.ssid,sizeof(shared.ssid),"%s",connected?c.ssid:apName);}
@@ -268,15 +298,19 @@ void details(uint32_t now){
     if(frame.settings.watch.contains(a))text(13,"WATCH",green());
     circle(112,217,3,detailPage==0?green():muted());circle(128,217,3,detailPage==1?green():muted());
 }
+setupui::QR setupQR; bool setupWiFiCode=true;
 void setupScreen(){
-    title(27,"SETUP",green());
-    text(58,frame.connected?"CONNECTED TO":"JOIN WIFI",muted());
-    char name[33];snprintf(name,sizeof(name),"%.30s",frame.ssid[0]?frame.ssid:apName);small(76,name,white());
-    if(!frame.connected){text(100,"PASSWORD",muted());title(115,apPassword,white());}
-    else {text(105,"OPEN IN YOUR BROWSER",muted());}
-    title(146,frame.ip[0]?frame.ip:"192.168.4.1",green());
-    text(181,frame.connected?"CLICK TO RETURN":"SAVE WIFI AND LOCATION",muted());
-    text(204,"HOLD 5S FOR SETUP",muted());
+    const bool wifi=!frame.connected&&setupWiFiCode;
+    title(23,wifi?"JOIN WIFI":"SCAN PHONE",green());
+    small(44,frame.connected?frame.ssid:wifi?apName:"2. OPEN SETUP",white());
+    char payload[160];
+    if(wifi)snprintf(payload,sizeof(payload),"WIFI:T:WPA;S:%s;P:%s;;",apName,apPassword);
+    else snprintf(payload,sizeof(payload),"http://%s/",frame.ip[0]?frame.ip:"192.168.4.1");
+    setupQR.prepare(payload);
+    setupQR.draw(120,65,126,[](int x,int y,int w,int h,bool white){rect(x,y,w,h,white?rgb(255,255,255):0);});
+    text(194,wifi?apPassword:frame.ip,green());
+    text(208,frame.connected?"PHONE ON SAME WIFI":"TURN: WIFI / WEBSITE",muted());
+
 }
 void render(uint32_t now){
     for(stripY=0;stripY<H;stripY+=stripHeight){
@@ -310,7 +344,8 @@ void controls(const KnobInput &state,uint32_t now){
     if(held&&view==View::Radar)rangeMode=mini::wrap(int(rangeMode)+held,2);
     else if(held&&view==View::Details)detailPage=mini::wrap(int(detailPage)+held,2);
     if(turns){
-        if(view==View::Menu)menuItem=mini::wrap(int(menuItem)+turns,3);
+        if(view==View::Setup&&!frame.connected)setupWiFiCode=!setupWiFiCode;
+        else if(view==View::Menu)menuItem=mini::wrap(int(menuItem)+turns,3);
         else if(view==View::Radar&&rangeMode){requestedRange=std::max(0,std::min(3,requestedRange.load()+turns));refreshRequested=true;}
         else if(view==View::Radar||view==View::Details)selected=mini::wrap(int(selected)+turns,availableAircraft());
     }
@@ -324,7 +359,7 @@ void controls(const KnobInput &state,uint32_t now){
     previous=state;
 }
 void setup(){
-    Serial.begin(115200);delay(500);deviceLog.println("EchoScope Mini 0.16.0 / ESP32-C3 standalone");
+    Serial.begin(115200);delay(500);deviceLog.println("EchoScope Mini 0.17.0-dev.1 / ESP32-C3 standalone");
     uint64_t mac=ESP.getEfuseMac();snprintf(apName,sizeof(apName),"EchoMini-%04X",unsigned((mac>>32)&0xffff));snprintf(apPassword,sizeof(apPassword),"%08lX",(unsigned long)esp_random());snprintf(csrf,sizeof(csrf),"%08lx%08lx%08lx%08lx",(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random());
     stateMutex=xSemaphoreCreateMutex();assert(stateMutex);input.holdMs=5000;
     pinMode(pinA,INPUT_PULLUP);pinMode(pinB,INPUT_PULLUP);pinMode(pinButton,INPUT_PULLUP);previousAB=(digitalRead(pinA)<<1)|digitalRead(pinB);

@@ -68,6 +68,9 @@ test: deps
 	.tools/tests/standalone_photo_test
 	$(CXX) -std=c++17 -Wall -Wextra -Werror -I include tests/evil_flyby_test.cpp -o .tools/tests/evil_flyby_test
 	.tools/tests/evil_flyby_test
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -I include -I ".pio/libdeps/$(ENV)/ArduinoJson/src" tests/watch_editor_test.cpp src/setup_qr.c -o .tools/tests/watch-editor
+	.tools/tests/watch-editor
+	"$(PY)" scripts/embed_setup.py --check
 	"$(PY)" tests/network_device_test.py
 firmware: build
 	"$(PY)" scripts/package_firmware.py --environment "$(ENV)"

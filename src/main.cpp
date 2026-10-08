@@ -30,6 +30,8 @@
 #include "standalone_json.h"
 #include "standalone_map.h"
 #include "standalone_photo.h"
+#include "watch_editor.h"
+#include "mobile_setup_assets.h"
 
 SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 namespace {
@@ -148,7 +150,8 @@ void controls(lv_timer_t *) {
         if(ui::input.takeClick(event.at,400)) knobSingle(now);
         if(event.steps) {
             if(wakeForInput(now)) { if(event.held) wakeButton=true; continue; }
-            if(wakeButton || ui::settings || ui::pageAnimating) continue;
+            if(ui::settings) { if(!ui::setupConnected) ui::setupWiFiCode=!ui::setupWiFiCode; continue; }
+            if(wakeButton || ui::pageAnimating) continue;
             const int delta=-event.steps; // clockwise-positive, matching Mini
             if(event.held) {
                 ui::input.cancelPress();
@@ -372,11 +375,11 @@ String alertColorInput(const char *name,const char *label,uint32_t color) {
 }
 void setupPage() {
     if(!portal) { server.send(403,"text/plain","Hold the knob for 5 seconds to enable setup."); return; }
-    String page=R"HTML(<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>EchoScope setup</title>
+    String page=R"HTML(<!doctype html><meta charset='utf-8'><meta name="viewport" content="width=device-width,initial-scale=1"><title>EchoScope setup</title>
 <style>body{background:#071918;color:#e8f8f4;font:17px system-ui;max-width:440px;margin:40px auto;padding:24px}h1{color:#68f3ae}label{display:block;margin:22px 0 6px}input,button,select{box-sizing:border-box;width:100%;padding:13px;border-radius:8px;border:1px solid #52716a;font:inherit}button{background:#68f3ae;margin-top:26px}p{line-height:1.5}h2{border-top:1px solid #52716a;padding-top:22px}fieldset{margin:32px 0 0;padding:16px;border:1px solid #52716a;border-radius:12px;min-width:0}legend{color:#68f3ae;font-weight:bold}h3{margin-top:28px}</style>
 <h1>EchoScope</h1><p>Choose your home Wi-Fi and the centre of your radar. Coordinates are decimal degrees; west and south are negative.</p><form method="post" action="/save">
 )HTML";
-    page+="<input type='hidden' name='token' value='"+csrf+"'>";
+    page+="<input type='hidden' name='token' value='"+csrf+"'><input type='hidden' name='watch_ui' value='"+escape(prefs.getString("watch_ui",""))+"'>";
     page+="<h2>Network and radar</h2>";
     page+="<label>Wi-Fi name (2.4 GHz)</label><input name='ssid' maxlength='32' required value='"+escape(ssid)+"'>";
     page+="<label>Wi-Fi password</label><input name='password' type='password' maxlength='63' autocomplete='new-password' placeholder='Leave blank to keep saved password'>";
@@ -437,6 +440,8 @@ void setupPage() {
     page+="<label><input style='width:auto' type='checkbox' name='pickup_arm'> Arm family pickup for this session (up to 24 hours)</label><p>Pickup keeps the screen awake. Reboot or explicit sleep disarms it. Requires configured flight, arrival airport and Docker device integration.</p>";
     page+="</fieldset>";
     page+="<button>Save and start radar</button></form><p>Live aircraft data: adsb.fi. Hold the knob to reopen setup. Settings stay on this device.</p>";
+    page.replace("<form method=\"post\" action=\"/save\">",String("<form method=\"post\" action=\"/save\" data-device=\"original\" data-configured=\"")+(configured?"1":"0")+"\">");
+    page+="<link rel='stylesheet' href='/setup.css'><script src='/setup.js' defer></script>";
     server.sendHeader("Cache-Control","no-store"); server.send(200,"text/html",page);
 }
 bool coordinate(const String &s,double min,double max,double &value) {
@@ -461,6 +466,7 @@ void saveSetup() {
     double newBrightness,newSleep,newRange;
     sky::Watches watches;
     const String types=server.arg("watch_types"),regs=server.arg("watch_regs"),calls=server.arg("watch_calls");
+    if(!setupui::watchMetadata(server.arg("watch_ui").c_str(),types.c_str(),regs.c_str(),calls.c_str(),true)) { server.send(400,"text/plain","Check watch names and identifiers, then reload setup if needed."); return; }
     if(!coordinate(server.arg("start_range"),0,4,newRange) || floor(newRange)!=newRange ||
        !coordinate(server.arg("brightness"),5,100,newBrightness) || std::floor(newBrightness)!=newBrightness ||
        !coordinate(server.arg("sleep"),0,1440,newSleep) || std::floor(newSleep)!=newSleep ||
@@ -531,7 +537,7 @@ void saveSetup() {
     startRange=unsigned(newRange); prefs.putUInt("start_range",startRange);
     sleepMinutes=unsigned(newSleep);
     prefs.putUInt("brightness",unsigned(newBrightness)); prefs.putUInt("sleep_min",sleepMinutes);
-    prefs.putString("watch_types",types); prefs.putString("watch_regs",regs); prefs.putString("watch_calls",calls);
+    prefs.putString("watch_types",types); prefs.putString("watch_regs",regs); prefs.putString("watch_calls",calls); prefs.putString("watch_ui",server.arg("watch_ui"));
     prefs.putBool("watch_mil",watchMilitary); prefs.putBool("watch_rotor",watchRotor);
     lvgl_port_lock(-1);
     brightness=unsigned(newBrightness);
@@ -553,6 +559,27 @@ void saveSetup() {
     WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=millis()+20000; nextFetch=millis(); retryDelay=5000;
     lvgl_port_lock(-1); ui::model.reset(); ui::model.demo=false; ui::settings=false; if(ui::pickupArmed) { ui::infoView=2; ui::infoNeedsFetch=true; } lvgl_port_unlock();
     status("Connecting to Wi-Fi");
+}
+void saveWatchlist() {
+    if(!portal || server.arg("token")!=csrf) { server.send(403,"text/plain","Hold the knob for five seconds and reopen setup."); return; }
+    const String types=server.arg("watch_types"),regs=server.arg("watch_regs"),calls=server.arg("watch_calls"),metadata=server.arg("watch_ui");
+    sky::Watches watches; watches.military=watchMilitary; watches.rotorcraft=watchRotor;
+    if(types.length()>255 || regs.length()>255 || calls.length()>255 || !watches.types.set(types.c_str()) || !watches.registrations.set(regs.c_str()) || !watches.callsigns.set(calls.c_str(),true) || !setupui::watchMetadata(metadata.c_str(),types.c_str(),regs.c_str(),calls.c_str(),true)) {
+        server.send(400,"text/plain","Check watchlist: up to 16 active entries per category, 15 characters each, and short friendly names."); return;
+    }
+    watchTypes=types; watchRegs=regs; watchCalls=calls;
+    prefs.putString("watch_types",types); prefs.putString("watch_regs",regs); prefs.putString("watch_calls",calls); prefs.putString("watch_ui",metadata);
+    lvgl_port_lock(-1); ui::model.watches=watches; ui::evilFlyby.automaticMask=fun::enabledBy(calls.c_str()); lvgl_port_unlock();
+    server.send(200,"text/plain","Watchlist saved");
+}
+void saveNetwork() {
+    if(!portal || server.arg("token")!=csrf) { server.send(403,"text/plain","Reopen setup and try again."); return; }
+    String name=server.arg("ssid"),pass=server.arg("password");
+    if(!pass.length() && name==ssid) pass=password;
+    if(!name.length() || name.length()>32 || pass.length()>63 || (pass.length() && pass.length()<8)) { server.send(400,"text/plain","Check Wi-Fi name and password (8–63 characters, or blank for an open network)."); return; }
+    ssid=name; password=pass; prefs.putString("ssid",ssid); prefs.putString("pass",password);
+    server.send(200,"text/plain","Wi-Fi saved. Scan the new website QR after connecting.");
+    WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=millis()+20000;
 }
 void updateSetupNetwork() {
     const bool connected=WiFi.status()==WL_CONNECTED;
@@ -1107,7 +1134,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.16.0 / ESP32-S3");
+    deviceLog.println("EchoScope 0.17.0-dev.1 / ESP32-S3");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
@@ -1211,9 +1238,13 @@ void setup() {
     server.on("/update",HTTP_POST,finishFirmwareUpload,uploadFirmwareChunk);
     server.on("/logs",HTTP_GET,networkLogs);
     server.on("/photo",HTTP_GET,photoSource); server.on("/test-photo",HTTP_POST,testPhotoService);
+    server.on("/setup.css",HTTP_GET,[](){server.sendHeader("Cache-Control","no-store");server.send_P(200,"text/css; charset=utf-8",setup_css);});
+    server.on("/setup.js",HTTP_GET,[](){server.sendHeader("Cache-Control","no-store");server.send_P(200,"application/javascript; charset=utf-8",setup_js);});
+    server.on("/watchlist",HTTP_POST,saveWatchlist); server.on("/network",HTTP_POST,saveNetwork);
     server.on("/",HTTP_GET,setupPage); server.on("/save",HTTP_POST,saveSetup); server.onNotFound(setupPage); server.begin();
-    if(configured) { WiFi.begin(ssid.c_str(),password.c_str()); status("Connecting to Wi-Fi"); }
+    if(!ssid.isEmpty()) { WiFi.begin(ssid.c_str(),password.c_str()); status("Connecting to Wi-Fi"); }
     else { demoFrame(millis()); openPortal(); }
+    if(!configured) requestPortal=true;
 }
 void loop() {
     if(requestPortal.exchange(false)) openPortal();
@@ -1230,7 +1261,7 @@ void loop() {
         portal=false; lvgl_port_lock(-1); ui::settings=false; lvgl_port_unlock();
     }
     server.handleClient(); if(apActive) dns.processNextRequest();
-    if(!connected && configured && int32_t(now-nextReconnect)>=0) { WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=now+20000; }
+    if(!connected && !ssid.isEmpty() && int32_t(now-nextReconnect)>=0) { WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=now+20000; }
     if(ui::asleep.load()) { localMap.cancel(); localMapKey=""; if(configured && connected && int32_t(now-nextFetch)>=0) fetch(); delay(20); return; }
     if(!configured) {
         static uint32_t lastDemo=0;

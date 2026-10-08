@@ -14,3 +14,6 @@ MatixYo/ESP32-Plane-Radar was consulted for its public feed URL and behaviour. N
 
 - `include/vendor/stb_image.h`: stb_image 2.30, Sean Barrett and contributors, used under the MIT option in its embedded dual licence. Unmodified file from https://github.com/nothings/stb/blob/013ac3beddff3dbffafd5177e7972067cd2b5083/stb_image.h ; SHA-256 `594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3`. Only the JPEG decoder is compiled, with bounded dimensions and PSRAM allocators on ESP32-S3.
 - Aircraft photo thumbnails: Planespotters.net and their respective photographers. The photographer credit and original-photo link travel with every thumbnail; no third-party photos are included in the repository's synthetic decoder test fixtures.
+
+- `include/vendor/qrcodegen.c` and `.h`: Project Nayuki QR Code generator, MIT licence retained, pinned at https://github.com/nayuki/QR-Code-generator/tree/3c6d0b3cefb4e049dc337e82237c9644399716a8/c . Used for locally generated setup QR codes on both devices.
+- Optional phone location search uses Open-Meteo/GeoNames (https://open-meteo.com/en/docs/geocoding-api) and Postcodes.io (https://postcodes.io/docs/postcode/lookup/). Confirmation maps are embedded from OpenStreetMap with attribution.
