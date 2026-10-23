@@ -6,7 +6,7 @@ inline char notification[121]{}; inline uint32_t notificationUntil=0,notificatio
 inline bool familyEnabled=false;
 inline bool weatherEnabled=false,flightsEnabled=false,airportsEnabled=false;
 inline bool infoMenu=false,infoNeedsFetch=false;
-inline int infoSelection=0,infoView=0,infoPage=0; // 1 weather, 2 family, 3 airports, 4 stargazing, 5 highlights
+inline int infoSelection=0,infoView=0,infoPage=0; // 1 weather, 2 family, 3 airports, 4 stargazing, 5 highlights, 6 rain
 inline char familyNumber[11]{};
 struct WeatherCard { char label[20]{},condition[24]{},temperature[24]{},cloud[24]{},rain[24]{},wind[24]{}; int icon=7; bool night=false; };
 struct AirportRunway { sky::Point from,to; char name[12]{}; };
@@ -18,12 +18,12 @@ inline InfoPage infoPages[9]{};
 inline unsigned infoCount=0;
 inline uint32_t infoReceived=0,infoGenerated=0;
 inline char infoSource[64]{},infoMessage[64]="Loading...";
-inline bool infoAvailable() { return stargazingEnabled || highlightsEnabled || satellitesEnabled || weatherEnabled || (familyEnabled && (familyNumber[0])) || airportsEnabled; }
+inline bool infoAvailable() { return stargazingEnabled || highlightsEnabled || satellitesEnabled || weatherEnabled || (familyEnabled && familyNumber[0]) || airportsEnabled; }
 inline bool infoOption(int option) {
-    return option==0?satellitesEnabled:option==1?weatherEnabled:option==2?familyEnabled && familyNumber[0]:option==3?airportsEnabled:option==4?stargazingEnabled:option==5?highlightsEnabled:false;
+    return option==0?satellitesEnabled:option==1?weatherEnabled:option==2?familyEnabled && familyNumber[0]:option==3?airportsEnabled:option==4?stargazingEnabled:option==5?highlightsEnabled:option==6?weatherEnabled:false;
 }
 inline void resetLog(bool preservePage=false);
-inline constexpr int infoOrder[]={5,2,3,1,4,0};
+inline constexpr int infoOrder[]={5,2,3,1,6,4,0};
 inline void changeLogPage(int direction);
 inline void renderLog(uint32_t now);
 inline bool sameItem(int a,int b) { return a==b || (infoPages[a].item[0] && !std::strcmp(infoPages[a].item,infoPages[b].item)); }
@@ -39,11 +39,13 @@ inline void changeInfoPage(int direction) {
     }
 }
 inline void turnInfoPage(int direction) {
+    if(infoView==6) { rainPage(direction); return; }
     if(infoView==3 && infoCount && infoPages[infoPage].airport.valid) airportPage=(airportPage+direction%2+2)%2;
     else if(infoView==5) changeLogPage(direction<0?-1:1);
     else changeInfoPage(direction<0?-1:1);
 }
 inline void rotateInfo(int delta) {
+    if(infoView==6) { model.rangeIndex=std::max(0,std::min(int(sizeof(sky::ranges)/sizeof(sky::ranges[0]))-1,model.rangeIndex-delta)); return; }
     if(infoView) {
         if(!infoCount) return;
         int starts[9]{},count=0; for(int i=0;i<int(infoCount);++i) if(itemFirst(i)==i) starts[count++]=i;
@@ -58,9 +60,9 @@ inline void rotateInfo(int delta) {
     }
     if(!infoAvailable()) return;
     int step=delta<0?1:-1;
-    for(int n=0;n<std::abs(delta);++n) for(int i=0;i<6;++i) {
+    for(int n=0;n<std::abs(delta);++n) for(int i=0;i<7;++i) {
         int index=0; while(infoOrder[index]!=infoSelection) ++index;
-        infoSelection=infoOrder[(index+step+6)%6];
+        infoSelection=infoOrder[(index+step+7)%7];
         if(infoOption(infoSelection)) break;
     }
 }
@@ -85,11 +87,11 @@ inline void pressInfo() {
 inline void renderInfo(uint32_t now) {
     if(infoMenu) {
         text(65,"INFORMATION",&lv_font_montserrat_24,green);
-        const char *labels[]={"Space stations","Weather / clouds","Family flight","Nearby airports","Stargazing tonight","Logbook"};
+        const char *labels[]={"Space stations","Weather / clouds","Family flight","Nearby airports","Stargazing tonight","Logbook","Rain radar"};
         int selected=0,total=0; for(int i:infoOrder) if(infoOption(i)) { if(i==infoSelection) selected=total; ++total; } itemRing(selected,total);
         int row=0;
         for(int i:infoOrder) if(infoOption(i)) {
-            const int y=118+row++*41;
+            const int y=105+row++*37;
             text(y,labels[i],&lv_font_montserrat_20,i==infoSelection?green:muted);
             if(i==infoSelection) line(110,y+28,356,y+28,green,2);
         }
@@ -97,6 +99,7 @@ inline void renderInfo(uint32_t now) {
         text(410,"Tap bottom: radar",&lv_font_montserrat_14,muted);
         return;
     }
+    if(infoView==6) { renderRain(); return; }
     if(infoView==5) { renderLog(now); return; }
     const bool stale=infoCount && uint32_t(now-infoReceived)>(infoView==2?60000u:1800000u);
     if(!infoCount || stale) {
@@ -129,6 +132,7 @@ inline void renderInfo(uint32_t now) {
 inline void tapInfo(int x,int y) {
     if(infoView) {
         if(pageSide(x,y)) {
+            if(infoView==6) { rainPage(pageSide(x,y)); return; }
             if(infoView==3 && infoCount && infoPages[infoPage].airport.valid) airportPage=1-airportPage;
             else if(infoView==5) changeLogPage(pageSide(x,y)); else changeInfoPage(pageSide(x,y));
             return;
@@ -138,7 +142,7 @@ inline void tapInfo(int x,int y) {
     if(y>=365) { infoMenu=false; return; }
     int row=0;
     for(int i:infoOrder) if(infoOption(i)) {
-        const int top=110+row++*41;
-        if(y>=top && y<top+41) { infoSelection=i; pressInfo(); return; }
+        const int top=97+row++*37;
+        if(y>=top && y<top+37) { infoSelection=i; pressInfo(); return; }
     }
 }

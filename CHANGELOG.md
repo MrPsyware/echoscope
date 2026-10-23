@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.0-dev.2 — unreleased, original ESP32-S3
+
+- Add Information → Rain radar: direct RainViewer past frames over the existing map, range control, history navigation, intensity legend, timestamp/stale state and coverage hatching. No Docker or API key required; Mini functionality is unchanged.
+- Bound PNG decoding and PSRAM buffers, fetch only while viewed, retain complete frames on failures, and apply rate-limit/error backoff. See [rain radar guide](docs/RAIN_RADAR.md).
+
 ## 0.17.0-dev.1 — unreleased, both knobs
 
 - Show local website / setup Wi-Fi QR codes on both Setup screens; turn the knob to switch hotspot codes.

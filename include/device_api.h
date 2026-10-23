@@ -9,15 +9,15 @@ bool apiAuthorized() {
 const char *devicePage() {
     if(ui::settings) return "setup";
     if(ui::infoMenu) return "information";
-    const char *pages[]={"radar","weather","family","airports","stargazing","logbook"};
-    if(ui::infoView>0 && ui::infoView<6) return pages[ui::infoView];
+    const char *pages[]={"radar","weather","family","airports","stargazing","logbook","rain"};
+    if(ui::infoView>0 && ui::infoView<7) return pages[ui::infoView];
     if(ui::satelliteView) return "stations";
     return ui::model.details?(ui::routePage?"route":"aircraft"):"radar";
 }
 void apiState() {
     if(!apiAuthorized()) return;
     JsonDocument doc;
-    doc["protocol"]=1; doc["id"]=WiFi.macAddress(); doc["version"]="0.17.0-dev.1";
+    doc["protocol"]=1; doc["id"]=WiFi.macAddress(); doc["version"]="0.17.0-dev.2";
     doc["lat"]=homeLat; doc["lon"]=homeLon;
     doc["family_flight"]=familyFlight; doc["family_callsign"]=familyCallsign; doc["family_arrival"]=familyArrival;
     doc["pickup_km"]=pickupKm; doc["satellite_alerts"]=satelliteAlerts;
@@ -30,8 +30,8 @@ void apiState() {
     if(ui::model.selection()) { pages.add("aircraft"); if(ui::routeAvailable()) pages.add("route"); }
     if(ui::infoAvailable()) pages.add("information");
     if(ui::satellitesEnabled) pages.add("stations");
-    const char *names[]={"","weather","family","airports","stargazing","logbook"};
-    for(int i=1;i<6;++i) if(ui::infoOption(i)) pages.add(names[i]);
+    const char *names[]={"","weather","family","airports","stargazing","logbook","rain"};
+    for(int i=1;i<7;++i) if(ui::infoOption(i)) pages.add(names[i]);
     auto list=doc["aircraft"].to<JsonArray>();
     if(!ui::model.demo) for(size_t i=0;i<ui::model.data.count;++i) {
         const auto &a=ui::model.data.aircraft[i]; const float age=sky::age(a,now);
@@ -78,8 +78,8 @@ void apiControl() {
         else { wakeForInput(now); ui::notificationUntil=0; ui::model.select(found); ui::model.details=true; ui::routePage=false; ui::infoView=0; ui::infoMenu=false; ui::satelliteView=false; }
     } else if(doc["page"].is<const char*>()) {
         String page=doc["page"].as<const char*>(); if(page=="highlights") page="logbook"; int view=0;
-        const char *names[]={"","weather","family","airports","stargazing","logbook"};
-        for(int i=1;i<6;++i) if(page==names[i] && ui::infoOption(i)) view=i;
+        const char *names[]={"","weather","family","airports","stargazing","logbook","rain"};
+        for(int i=1;i<7;++i) if(page==names[i] && ui::infoOption(i)) view=i;
         const bool valid=view || page=="radar" || (page=="information" && ui::infoAvailable()) || (page=="stations" && ui::satellitesEnabled) || (page=="aircraft" && ui::model.selection()) || (page=="route" && ui::routeAvailable());
         if(!valid) { code=404; message="Page unavailable"; }
         else {

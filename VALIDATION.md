@@ -407,3 +407,11 @@ timing and HTTP selection of the new visitors remain to be confirmed.
 - Independently decoded Wi-Fi and website QR images with zbar at both 240×240 and 466×466 display geometries. All four payloads matched; white quiet zones and integer module scaling are preserved. Synthetic test credentials only were used.
 - Live Open-Meteo geocoding and Postcodes.io requests returned HTTP 200 with `Access-Control-Allow-Origin: *`, confirming browser access from the local HTTP origin. Search requests occur only on explicit user action; optional map loading is also explicit.
 - Not flashed yet. Physical camera scans, small-display legibility, network handover/NVS persistence, captive-network browsers and iPhone/Safari behaviour remain to be confirmed on devices. Published 0.16.0 and main are unchanged; development work is on `dev/mobile-setup`.
+
+## 0.17.0-dev.2 — original rain radar (23 October 2026)
+
+- `make -o deps test` passed, including new manifest/path/time validation, coverage alpha/hatching, stale-time checks and all supported ranges at high latitudes and across the date line. Rain tests also passed ASan/UBSan with LeakSanitizer disabled because this execution environment uses ptrace.
+- Live RainViewer manifest and radar/coverage PNG requests returned HTTP 200. TLS 1.2 verification passed using only EchoScope's bundled CA roots. Universal Blue, max zoom 7, past-only frames and current limits checked against the provider documentation.
+- Native LVGL rendering of the actual rain UI inspected, using a fetched PNG and deliberately synthetic half-viewport coverage mask. Frame navigation/end stops, knob range selection and centre-to-radar assertions passed. This is a desktop render, not hardware validation.
+- ESP32-S3 build passed: static RAM 110,620 / 327,680 bytes; application approximately 2.10 MB / 6.25 MiB. Dynamic PSRAM usage is documented in `docs/RAIN_RADAR.md`; it has not yet been measured on the device.
+- Packaged original app/merged images and checksums. No knob flashed and no stable release published. Mini feature code is unchanged.

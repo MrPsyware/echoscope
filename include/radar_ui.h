@@ -1,5 +1,6 @@
 #pragma once
 #include "setup_qr.h"
+#include "rain_model.h"
 #include "airport_hit.h"
 #include "radar_selection.h"
 #include <lvgl.h>
@@ -61,6 +62,7 @@ inline lv_point_t screen(sky::Point p) {
 #include "radar_visuals.h"
 #include "airport_ui.h"
 #include "navigation.h"
+#include "rain_ui.h"
 #include "insight_ui.h"
 #include "logbook_ui.h"
 inline int selectedAirportIndex() {

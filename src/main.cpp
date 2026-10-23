@@ -432,7 +432,7 @@ void setupPage() {
         page+="<label>Airport brightness (%)</label><input name='airport_bright' type='number' min='0' max='100' required value='"+String(ui::airportBrightness)+"'><p>Airline airports have scheduled service. Markers appear behind aircraft. Size and airline filters apply to server data; the standalone pack contains large scheduled-service airports plus your custom entries. Data: OurAirports.</p>";
     }
     page+="<input type='hidden' name='map_setting' value='1'><label><input style='width:auto' type='checkbox' name='map_enabled' "+String(mapWanted?"checked":"")+"> Faint map background</label>";
-    page+="<p>Standalone maps download only the viewed range. Tiles are cached on this device for at least seven days; radar remains usable while a map prepares. Map availability depends on internet access and cache space. Weather times are UTC in standalone mode.</p></fieldset><fieldset><legend>Info server integration</legend><h3>Home Assistant / observing</h3><input type='hidden' name='integration_setting' value='1'>";
+    page+="<p>Standalone maps download only the viewed range. Tiles are cached on this device for at least seven days; radar remains usable while a map prepares. Map availability depends on internet access and cache space. Weather times are UTC in standalone mode.</p><p>Rain radar (original knob): past radar frames, fetched directly when viewed. <a href='https://www.rainviewer.com/' target='_blank' rel='noopener'>Weather data by RainViewer</a>. Colours indicate radar intensity, not a forecast or measured rain at ground level. Hatched areas have no radar coverage; unhatched areas can still have missing observations.</p></fieldset><fieldset><legend>Info server integration</legend><h3>Home Assistant / observing</h3><input type='hidden' name='integration_setting' value='1'>";
     page+="<label><input style='width:auto' type='checkbox' name='integration_enabled' "+String(integrationEnabled?"checked":"")+"> Enable authenticated LAN integration</label>";
     page+="<p>Use this device URL and token in the Docker server configuration. Keep the token private; it grants display controls and access to aircraft/location data.</p><label>Device API token</label><input readonly value='"+escape(apiToken)+"'>";
     page+="<label><input style='width:auto' type='checkbox' name='satellite_alerts' "+String(satelliteAlerts?"checked":"")+"> Alert / wake for visible station passes (2 minutes ahead)</label>";
@@ -450,6 +450,7 @@ bool coordinate(const String &s,double min,double max,double &value) {
     return end!=s.c_str() && *end==0 && std::isfinite(value) && value>=min && value<=max;
 }
 void resetStandalone();
+namespace rainRuntime { void reset(); }
 void saveSetup() {
     if(!portal || server.arg("token")!=csrf) { server.send(403,"text/plain","Reopen the setup page and try again."); return; }
     String newSSID=server.arg("ssid"), newPassword=server.arg("password"),newPhoto=server.arg("photo_url");
@@ -511,7 +512,7 @@ void saveSetup() {
         lvgl_port_lock(-1); ui::airportMode=unsigned(airportMode); ui::airportSize=unsigned(airportSize);
         ui::airportBrightness=unsigned(airportBright); ui::airportColor=airportColor; ui::airportLabels=server.hasArg("airport_labels"); lvgl_port_unlock();
     }
-    resetStandalone();
+    resetStandalone(); rainRuntime::reset();
     customAirportText=newCustom; customAirports=parsedAirports; builtInAirports=server.hasArg("builtin_airports");
     prefs.putString("custom_airports",customAirportText); prefs.putBool("builtin_airports",builtInAirports);
     capsAirportOverlay=false; requestedAirportRange=-1; nextAirports=0;
@@ -675,6 +676,7 @@ bool infoJSON(const String &path,JsonDocument &doc) {
     http.end(); return ok;
 }
 #include "standalone_runtime.h"
+#include "rain_runtime.h"
 // Called with the UI lock held. Fetch only the visible photo-bearing page.
 void photoTarget(char (&reg)[16]) {
     reg[0]=0;
@@ -981,7 +983,7 @@ void fetchLogbook() {
     }
 }
 void fetchInfo() {
-    if(ui::asleep.load()) { localMap.cancel(); localMapKey=""; return; }
+    if(ui::asleep.load()) { localMap.cancel(); localMapKey=""; rainRuntime::cancel(); return; }
     const uint32_t now=millis();
     if(int32_t(now-nextCapabilities)>=0) { discoverInfo(); return; }
     lvgl_port_lock(-1);
@@ -991,12 +993,22 @@ void fetchInfo() {
     const String routeTarget=ui::model.details && !ui::settings && ui::flightsEnabled?String(routeAircraft?routeAircraft->callsign:ui::detailCall):String("");
     const bool needsInfo=ui::infoNeedsFetch; ui::infoNeedsFetch=false;
     const int rangeIndex=ui::model.rangeIndex;
+    const int rainFrame=ui::rainFrame;
     String approach; double approachLat=0,approachLon=0;
     if(insight==3 && ui::airportPage==1 && ui::infoCount && ui::infoPages[ui::infoPage].airport.valid) {
         const auto &p=ui::infoPages[ui::infoPage]; approach=p.item; approachLat=p.airport.lat; approachLon=p.airport.lon;
     }
     lvgl_port_unlock();
-    if(!mapWanted || (!radar && approach.isEmpty())) { localMap.cancel(); localMapKey=""; }
+    if(!mapWanted || (!radar && insight!=6 && approach.isEmpty())) { localMap.cancel(); localMapKey=""; }
+    if(insight==6) {
+        rainRuntime::step(rangeIndex,rainFrame);
+        if(!rainRuntime::active && capsMaps && mapWanted) {
+            if(requestedMapRange!=rangeIndex) nextMap=now;
+            if(int32_t(now-nextMap)>=0) fetchMap(rangeIndex);
+        }
+        return;
+    }
+    rainRuntime::cancel();
     if(insight) {
         if(needsInfo || lastInsight!=insight) { nextInsight=0; lastInsight=insight; }
         if(int32_t(now-nextInsight)>=0) { fetchInsight(insight); return; }
@@ -1134,7 +1146,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.17.0-dev.1 / ESP32-S3");
+    deviceLog.println("EchoScope 0.17.0-dev.2 / ESP32-S3");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);
@@ -1262,7 +1274,7 @@ void loop() {
     }
     server.handleClient(); if(apActive) dns.processNextRequest();
     if(!connected && !ssid.isEmpty() && int32_t(now-nextReconnect)>=0) { WiFi.begin(ssid.c_str(),password.c_str()); nextReconnect=now+20000; }
-    if(ui::asleep.load()) { localMap.cancel(); localMapKey=""; if(configured && connected && int32_t(now-nextFetch)>=0) fetch(); delay(20); return; }
+    if(ui::asleep.load()) { localMap.cancel(); localMapKey=""; rainRuntime::cancel(); if(configured && connected && int32_t(now-nextFetch)>=0) fetch(); delay(20); return; }
     if(!configured) {
         static uint32_t lastDemo=0;
         if(uint32_t(now-lastDemo)>1000) { demoFrame(now); lastDemo=now; }
