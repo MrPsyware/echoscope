@@ -23,10 +23,10 @@ class Photos(unittest.TestCase):
         handler=object.__new__(service.Handler)
         handler.reply=Mock()
         handler.path='/health'
-        with patch.dict(os.environ, {'ENABLE_PHOTOS':'0'}), patch.object(service.extras,'MAPS',False), patch.object(service.extras,'available_satellites',return_value=[]), patch.object(service.insights,'WEATHER',False), patch.object(service.insights,'FLIGHTS',False), patch.object(service.insights,'AIRPORTS',False):
+        with patch.object(service.rain,'ENABLED',False), patch.dict(os.environ, {'ENABLE_PHOTOS':'0'}), patch.object(service.extras,'MAPS',False), patch.object(service.extras,'available_satellites',return_value=[]), patch.object(service.insights,'WEATHER',False), patch.object(service.insights,'FLIGHTS',False), patch.object(service.insights,'AIRPORTS',False):
             handler.do_GET()
         payload=service.json.loads(handler.reply.call_args.args[1])
-        self.assertEqual(payload['capabilities'], {'photos':False,'maps':False,'satellites':False,'weather':False,'flights':False,'airports':False,'airport_overlay':False,'stargazing':False,'highlights':False})
+        self.assertEqual(payload['capabilities'], {'rain_radar':False,'photos':False,'maps':False,'satellites':False,'weather':False,'flights':False,'airports':False,'airport_overlay':False,'stargazing':False,'highlights':False})
         for path,flag in [('/v1/weather?lat=51&lon=0','WEATHER'),('/v1/family?flight=U2123','FLIGHTS'),('/v1/airports?lat=51&lon=0','AIRPORTS')]:
             handler.path=path
             with patch.object(service.insights,flag,False): handler.do_GET()
@@ -37,6 +37,19 @@ class Photos(unittest.TestCase):
         handler.path='/v1/map?lat=51&lon=0&range=25'
         with patch.object(service.extras,'MAPS',False): handler.do_GET()
         self.assertEqual(handler.reply.call_args.args[0],404)
+
+    def test_rain_endpoints(self):
+        from unittest.mock import Mock
+        handler=object.__new__(service.Handler); handler.reply=Mock()
+        handler.path='/v1/rain'
+        with patch.object(service.rain,'ENABLED',False): handler.do_GET()
+        self.assertEqual(handler.reply.call_args.args[0],404)
+        with patch.object(service.rain,'ENABLED',True), patch.object(service.rain.CACHE,'response',return_value=(202,b'Preparing')):
+            handler.do_GET()
+        self.assertEqual(handler.reply.call_args.args[0],202)
+        handler.path='/v1/rain/frame?lat=nan&lon=0&range=25&time=1'
+        with patch.object(service.rain,'ENABLED',True): handler.do_GET()
+        self.assertEqual(handler.reply.call_args.args[0],400)
 
     def test_negative_cache(self):
         service.CACHE.clear()

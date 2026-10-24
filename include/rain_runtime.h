@@ -4,6 +4,8 @@ namespace rainRuntime {
 static_assert(sizeof(lv_color_t)==2,"Rain image packing requires RGB565");
 rain::Timeline timeline;
 uint32_t nextManifest=0,nextRequest=0,retryAt=0;
+uint32_t remoteUntil=0,remoteWaiting=0;
+String remoteKey;
 uint32_t *lookup=nullptr;
 uint8_t *working=nullptr,*coverage=nullptr,*display=nullptr;
 struct Tile { int x=0,y=0; } tiles[16];
@@ -14,7 +16,7 @@ bool coverageStep=true,active=false;
 void cancel() { free(lookup); free(working); lookup=nullptr; working=nullptr; active=false; }
 void message(const char *value) { lvgl_port_lock(-1); snprintf(ui::rainMessage,sizeof(ui::rainMessage),"%s",value); lvgl_port_unlock(); }
 void reset() {
-    cancel(); free(coverage); coverage=nullptr; coverageRange=-1; nextManifest=nextRequest=retryAt=0; timeline.count=0;
+    cancel(); free(coverage); coverage=nullptr; coverageRange=-1; nextManifest=nextRequest=retryAt=0; timeline.count=0; remoteUntil=remoteWaiting=0; remoteKey="";
     lvgl_port_lock(-1); ui::rainReady=false; ui::rainCount=0; lv_img_cache_invalidate_src(&ui::rainImage); free(display); display=nullptr; ui::rainImage={}; lvgl_port_unlock();
 }
 void fail(const char *why) { cancel(); retryAt=millis()+60000; message(why); deviceLog.printf("[rain] %s\n",why); }
@@ -38,6 +40,56 @@ bool tilePNG(const String &url,uint8_t **rgba) {
     http.end(); nextRequest=millis()+(code==429?120000:1100);
     return ok;
 }
+bool useRemote() { return remoteRain && int32_t(millis()-remoteUntil)>=0; }
+void remoteFailed(int code) {
+    remoteUntil=millis()+120000; remoteWaiting=0; remoteKey=""; nextRequest=0; retryAt=code==429?millis()+120000:0; cancel();
+    message(code==429?"Rain provider rate limited / retrying":"Server unavailable / using standalone");
+    deviceLog.printf("[rain] Server HTTP=%d; standalone fallback for 120s\n",code);
+}
+bool remotePending(const String &key) {
+    if(remoteKey!=key) { remoteKey=key; remoteWaiting=millis(); }
+    if(uint32_t(millis()-remoteWaiting)>45000) { remoteFailed(202); return false; }
+    nextRequest=millis()+1000; message("Info server preparing rain radar..."); return true;
+}
+int remoteManifest(JsonDocument &doc) {
+    NetworkClient client; HTTPClient http; http.useHTTP10(true); http.setConnectTimeout(1500); http.setTimeout(4000);
+    http.begin(client,photoBase+"/v1/rain"); int code=http.GET();
+    if(code==200) {
+        auto body=readFeedBody(http,65536,5000);
+        if(!body.complete || deserializeJson(doc,body.text.c_str(),body.text.length()) || doc.overflowed()) code=502;
+    }
+    http.end(); return code;
+}
+void remoteFrame(int range,int frame) {
+    const uint32_t stamp=timeline.frames[frame].time;
+    const String key=String(range)+"/"+String(stamp);
+    const String path="/v1/rain/frame?lat="+String(homeLat,6)+"&lon="+String(homeLon,6)+"&range="+String(int(sky::ranges[range]))+"&time="+String(stamp);
+    NetworkClient client; HTTPClient http; http.useHTTP10(true); http.setConnectTimeout(1500); http.setTimeout(4000);
+    http.begin(client,photoBase+path); int code=http.GET();
+    if(code==200) {
+        auto body=readFeedBody(http,rain::packetBytes,5000);
+        if(body.complete && rain::validPacket(body.text.c_str(),body.text.length(),stamp)) {
+            auto *pixels=static_cast<uint8_t*>(heap_caps_malloc(420*420*3,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
+            if(pixels) {
+                // The wire format is RGB565 big-endian + alpha, like our LVGL configuration.
+                static_assert(LV_COLOR_16_SWAP==1,"Rain packet requires swapped RGB565");
+                memcpy(pixels,body.text.c_str()+12,420*420*3);
+                lvgl_port_lock(-1);
+                if(ui::infoView==6 && !ui::settings && ui::model.rangeIndex==range && ui::rainFrame==frame && !ui::asleep.load()) {
+                    lv_img_cache_invalidate_src(&ui::rainImage); free(display); display=pixels; pixels=nullptr;
+                    ui::rainImage.header.cf=LV_IMG_CF_TRUE_COLOR_ALPHA; ui::rainImage.header.w=420; ui::rainImage.header.h=420;
+                    ui::rainImage.data_size=420*420*3; ui::rainImage.data=display;
+                    ui::rainReady=true; ui::rainRange=range; ui::rainShown=stamp; ui::rainMessage[0]=0;
+                }
+                lvgl_port_unlock(); free(pixels);
+            } else code=507;
+        } else code=502;
+    }
+    http.end(); deviceLog.printf("[rain] Server frame %lu range=%d HTTP=%d\n",(unsigned long)stamp,int(sky::ranges[range]),code);
+    if(code==202) { remotePending(key); return; }
+    remoteWaiting=0; remoteKey="";
+    if(code!=200) remoteFailed(code);
+}
 void step(int range,int frame) {
     const uint32_t now=millis();
     if(time(nullptr)<1700000000) { message("Waiting for clock sync"); return; }
@@ -45,8 +97,15 @@ void step(int range,int frame) {
     if(!active && int32_t(now-nextManifest)>=0) {
         JsonDocument doc(&standaloneAllocator); rain::Timeline next;
         int code=0;
-        const bool ok=publicJSON("https://api.rainviewer.com/public/weather-maps.json",doc,&code) && next.parse(doc.as<JsonVariantConst>(),time(nullptr));
-        nextManifest=millis()+(ok?300000:60000); nextRequest=millis()+(code==429?120000:1100);
+        bool fetched=false; const bool fromServer=useRemote();
+        if(fromServer) {
+            code=remoteManifest(doc);
+            if(code==202) { remotePending("manifest"); return; }
+            if(code!=200 || !next.parse(doc.as<JsonVariantConst>(),time(nullptr))) { remoteFailed(code); return; }
+            fetched=true; remoteWaiting=0; remoteKey="";
+        } else fetched=publicJSON("https://api.rainviewer.com/public/weather-maps.json",doc,&code);
+        const bool ok=fetched && next.parse(doc.as<JsonVariantConst>(),time(nullptr));
+        nextManifest=millis()+(ok?300000:60000); nextRequest=millis()+(code==429?120000:fromServer?0:1100);
         if(!ok) { fail("Rain service unavailable / retrying"); return; }
         lvgl_port_lock(-1);
         const bool latest=!ui::rainCount || ui::rainFrame==ui::rainCount-1;
@@ -62,6 +121,7 @@ void step(int range,int frame) {
     if(!active) {
         lvgl_port_lock(-1); const bool ready=ui::rainReady && ui::rainRange==range && ui::rainShown==selected.time; lvgl_port_unlock();
         if(ready) return;
+        if(useRemote()) { remoteFrame(range,frame); return; }
         if(std::abs(homeLat)>85) { fail("Radar unavailable at this latitude"); return; }
         lookup=static_cast<uint32_t*>(heap_caps_malloc(420*420*4,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
         working=static_cast<uint8_t*>(heap_caps_calloc(420*420,3,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));

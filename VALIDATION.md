@@ -415,3 +415,10 @@ timing and HTTP selection of the new visitors remain to be confirmed.
 - Native LVGL rendering of the actual rain UI inspected, using a fetched PNG and deliberately synthetic half-viewport coverage mask. Frame navigation/end stops, knob range selection and centre-to-radar assertions passed. This is a desktop render, not hardware validation.
 - ESP32-S3 build passed: static RAM 110,620 / 327,680 bytes; application approximately 2.10 MB / 6.25 MiB. Dynamic PSRAM usage is documented in `docs/RAIN_RADAR.md`; it has not yet been measured on the device.
 - Packaged original app/merged images and checksums. No knob flashed and no stable release published. Mini feature code is unchanged.
+
+## 0.17.0-dev.3 — rain server offload (24 October 2026)
+
+- Host firmware tests passed, including complete ECR1 packet validation, dimensions, timestamps and truncated/wrong-format rejection. Original ESP32-S3 build/package passed: static RAM 110,644 bytes; application 2,098,696 bytes.
+- All 64 info-service tests passed, including rain endpoint discovery/disable/validation, pixel packing and alpha/coverage agreement, date-line/polar coordinates, tile cache reuse, worker deduplication and upstream failure/429 backoff.
+- Built the actual Docker image, including its `.dockerignore` allowlist, and ran a temporary read-only container under the production 256 MiB limit. Live RainViewer manifest and 25 km frame succeeded. Cold frame: 4.53 s; cached identical 529,212-byte packet: 2.69 ms over localhost (not ESP32 Wi-Fi). Observed container memory after this isolated test: 49.75 MiB. Other optional services were disabled for the test. Test container removed afterward.
+- Loaded the live server packet into the native LVGL rain renderer and inspected RGB565/alpha rendering; navigation assertions passed. No on-device offload timing or server-failure test yet. No firmware upload or remote Docker deployment performed in this change.

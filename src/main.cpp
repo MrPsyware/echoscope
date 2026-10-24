@@ -49,7 +49,7 @@ uint32_t photoRetryAt=0;
 char photoAttempt[16]{};
 lv_color_t *photoPixels=nullptr,*mapPixels=nullptr;
 bool capsPhotos=false,capsMaps=false,capsSatellites=false,mapWanted=true;
-bool remotePhotos=false,remoteMaps=false,remoteWeather=false,remoteFlights=false,remoteAirports=false,remoteAirportOverlay=false;
+bool remoteRain=false,remotePhotos=false,remoteMaps=false,remoteWeather=false,remoteFlights=false,remoteAirports=false,remoteAirportOverlay=false;
 String customAirportText;
 standalone::CustomAirports customAirports;
 bool builtInAirports=true;
@@ -280,9 +280,10 @@ void testPhotoService() {
         if(doc["capabilities"]["maps"]==true) result+=" maps";
         if(doc["capabilities"]["satellites"]==true) result+=" space stations";
         if(doc["capabilities"]["weather"]==true) result+=" weather";
+        if(doc["capabilities"]["rain_radar"]==true) result+=" rain radar";
         if(doc["capabilities"]["flights"]==true) result+=" flights";
         if(doc["capabilities"]["airports"]==true) result+=" airports";
-        if(!legacy && doc["capabilities"]["weather"]!=true && doc["capabilities"]["flights"]!=true && doc["capabilities"]["airports"]!=true && doc["capabilities"]["photos"]!=true && doc["capabilities"]["maps"]!=true && doc["capabilities"]["satellites"]!=true) result+=" none currently";
+        if(!legacy && doc["capabilities"]["weather"]!=true && doc["capabilities"]["flights"]!=true && doc["capabilities"]["airports"]!=true && doc["capabilities"]["photos"]!=true && doc["capabilities"]["maps"]!=true && doc["capabilities"]["satellites"]!=true && doc["capabilities"]["rain_radar"]!=true) result+=" none currently";
         result+=".";
     }
     server.send(ok?200:502,"text/plain",result);
@@ -432,7 +433,7 @@ void setupPage() {
         page+="<label>Airport brightness (%)</label><input name='airport_bright' type='number' min='0' max='100' required value='"+String(ui::airportBrightness)+"'><p>Airline airports have scheduled service. Markers appear behind aircraft. Size and airline filters apply to server data; the standalone pack contains large scheduled-service airports plus your custom entries. Data: OurAirports.</p>";
     }
     page+="<input type='hidden' name='map_setting' value='1'><label><input style='width:auto' type='checkbox' name='map_enabled' "+String(mapWanted?"checked":"")+"> Faint map background</label>";
-    page+="<p>Standalone maps download only the viewed range. Tiles are cached on this device for at least seven days; radar remains usable while a map prepares. Map availability depends on internet access and cache space. Weather times are UTC in standalone mode.</p><p>Rain radar (original knob): past radar frames, fetched directly when viewed. <a href='https://www.rainviewer.com/' target='_blank' rel='noopener'>Weather data by RainViewer</a>. Colours indicate radar intensity, not a forecast or measured rain at ground level. Hatched areas have no radar coverage; unhatched areas can still have missing observations.</p></fieldset><fieldset><legend>Info server integration</legend><h3>Home Assistant / observing</h3><input type='hidden' name='integration_setting' value='1'>";
+    page+="<p>Standalone maps download only the viewed range. Tiles are cached on this device for at least seven days; radar remains usable while a map prepares. Map availability depends on internet access and cache space. Weather times are UTC in standalone mode.</p><p>Rain radar (original knob): past radar frames, rendered by a capable info server or fetched directly when viewed. <a href='https://www.rainviewer.com/' target='_blank' rel='noopener'>Weather data by RainViewer</a>. Colours indicate radar intensity, not a forecast or measured rain at ground level. Hatched areas have no radar coverage; unhatched areas can still have missing observations.</p></fieldset><fieldset><legend>Info server integration</legend><h3>Home Assistant / observing</h3><input type='hidden' name='integration_setting' value='1'>";
     page+="<label><input style='width:auto' type='checkbox' name='integration_enabled' "+String(integrationEnabled?"checked":"")+"> Enable authenticated LAN integration</label>";
     page+="<p>Use this device URL and token in the Docker server configuration. Keep the token private; it grants display controls and access to aircraft/location data.</p><label>Device API token</label><input readonly value='"+escape(apiToken)+"'>";
     page+="<label><input style='width:auto' type='checkbox' name='satellite_alerts' "+String(satelliteAlerts?"checked":"")+"> Alert / wake for visible station passes (2 minutes ahead)</label>";
@@ -745,6 +746,7 @@ void discoverInfo() {
     capsPhotos=photoPixels!=nullptr;
     if(oldPhotos!=remotePhotos) { photoAttempt[0]=0; photoRetryAt=0; }
     const bool oldMaps=remoteMaps,oldAirports=remoteAirports,oldOverlay=remoteAirportOverlay,oldWeather=remoteWeather,oldFlights=remoteFlights;
+    remoteRain=ok && doc["capabilities"]["rain_radar"]==true;
     remoteMaps=ok && doc["capabilities"]["maps"]==true;
     capsMaps=mapPixels!=nullptr;
     if(oldMaps!=remoteMaps) { localMap.cancel(); localMapKey=""; nextMap=nextApproachMap=0; requestedMapRange=-1; requestedApproach=""; }
@@ -1146,7 +1148,7 @@ void fetch() {
 
 void setup() {
     Serial.begin(115200);
-    deviceLog.println("EchoScope 0.17.0-dev.2 / ESP32-S3");
+    deviceLog.println("EchoScope 0.17.0-dev.3 / ESP32-S3");
     deviceLog.printf("[tasks] Network core=%d, LVGL core=%d\n",xPortGetCoreID(),LVGL_PORT_TASK_CORE);
     // Keep the original NVS namespace so existing Wi-Fi/location survive updates.
     prefs.begin("sky-knob",false);

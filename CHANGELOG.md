@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.0-dev.3 — unreleased, original and info server
+
+- Offload RainViewer tile downloading, PNG decoding and overlay stitching to capable info servers. Cache assembled frames and source tiles in bounded server RAM.
+- Discover `rain_radar` automatically; retain standalone support for older/disabled/unreachable servers, validate complete packets before display, and handle asynchronous rendering and provider cooldowns.
+- Add server/firmware protocol, cache, projection, coverage and failure tests. Rebuild Docker and update original firmware to use offload; Mini is unchanged.
+
 ## 0.17.0-dev.2 — unreleased, original ESP32-S3
 
 - Add Information → Rain radar: direct RainViewer past frames over the existing map, range control, history navigation, intensity legend, timestamp/stale state and coverage hatching. No Docker or API key required; Mini functionality is unchanged.

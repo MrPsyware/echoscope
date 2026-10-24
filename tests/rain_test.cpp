@@ -2,6 +2,7 @@
 #include <cassert>
 #include <set>
 #include <iostream>
+#include <vector>
 int main() {
     constexpr uint32_t now=1792789800;
     rain::Timeline t; JsonDocument doc;
@@ -23,6 +24,14 @@ int main() {
     assert(rain::overlay(dry,0,10,10).a==0); // clear covered pixel preserves the map
     assert(rain::overlay(dry,255,0,0).a==150); // uncovered is never reported as clear
     assert(rain::overlay(wet,255,5,0).a==30); // coverage masks weather, including hatch gaps
+    std::vector<char> packet(rain::packetBytes,0);
+    const uint8_t header[]={ 'E','C','R','1',0xa4,1,0xa4,1,0x78,0x56,0x34,0x12 };
+    std::memcpy(packet.data(),header,sizeof(header));
+    assert(rain::validPacket(packet.data(),packet.size(),0x12345678));
+    assert(!rain::validPacket(packet.data(),packet.size()-1,0x12345678));
+    assert(!rain::validPacket(packet.data(),packet.size(),0x12345679));
+    packet[4]=0; assert(!rain::validPacket(packet.data(),packet.size(),0x12345678));
+    packet[4]=char(0xa4); packet[0]='X'; assert(!rain::validPacket(packet.data(),packet.size(),0x12345678));
     // Every supported viewport fits the bounded tile table, including the date line.
     for(double lat:{-85.,-60.,0.,51.5,85.}) for(double lon:{-179.99,0.,179.99}) for(double km:sky::ranges) {
         int z=rain::zoom(lat,km); assert(z>=0 && z<=7); std::set<std::pair<int,int>> tiles;

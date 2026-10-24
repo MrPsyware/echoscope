@@ -4,6 +4,7 @@ import sqlite3
 import logging
 import os
 import extras
+import rain
 import insights
 import observing
 import integration
@@ -169,13 +170,22 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/health':
             body = {'service': 'echoscope-photos', 'name': 'EchoScope Info Server', 'protocol': 1,
                     'capabilities': {'photos': os.environ.get('ENABLE_PHOTOS', '1') == '1',
-                                     'maps': extras.MAPS, 'satellites': bool(extras.available_satellites()),
+                                     'rain_radar': rain.ENABLED, 'maps': extras.MAPS, 'satellites': bool(extras.available_satellites()),
                                      'stargazing': observing.ready(), 'highlights': integration.ready(),
                                      'weather': insights.WEATHER, 'flights': insights.FLIGHTS,
                                      'airport_overlay': insights.overlay_ready(),
                                      'airports': insights.AIRPORTS and bool(insights.AIRPORT_INDEX)},
                     'map_credit': extras.MAP_CREDIT}
             return self.reply(200, json.dumps(body).encode(), 'application/json')
+        if path in ('/v1/rain', '/v1/rain/frame'):
+            if not rain.ENABLED: return self.reply(404, b'Rain radar disabled', 'text/plain')
+            try:
+                code, body = (rain.CACHE.response('manifest', download) if path == '/v1/rain'
+                              else rain.response(urlsplit(self.path).query, download))
+                mime = 'application/json' if code == 200 and path == '/v1/rain' else 'application/octet-stream'
+                return self.reply(code, body, mime)
+            except (ValueError, KeyError, TypeError):
+                return self.reply(400, b'Invalid rain radar query', 'text/plain')
         if path.startswith(('/v1/logbook/','/v1/logmap/','/sighting/','/sighting-map/')):
             if integration.STORE is None: return self.reply(404,b'Logbook unavailable','text/plain')
             if not GATE.acquire(blocking=False): return self.reply(503,b'Busy','text/plain')

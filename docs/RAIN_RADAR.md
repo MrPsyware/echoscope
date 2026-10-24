@@ -1,6 +1,6 @@
 # Rain radar (original EchoScope)
 
-Available in development firmware 0.17.0-dev.2. The Mini is unchanged.
+Available in development firmware 0.17.0-dev.2; server offload in 0.17.0-dev.3. The Mini is unchanged.
 
 Open **Information → Rain radar**. Turn the knob to change the radius (5, 10,
 25, 50 or 100 km). Tap **< / >**, swipe, or hold-and-turn to move through the
@@ -10,8 +10,8 @@ selected automatically. Selecting history keeps that time until it leaves the
 provider's history window. The aircraft view and rain view share the range.
 
 The map uses the existing faint-map setting, with the info-server map when
-available and cached standalone OSM tiles otherwise. Rain radar itself connects
-directly to RainViewer: no Docker service, account or API key is needed.
+available and cached standalone OSM tiles otherwise. Rain radar automatically uses an info server advertising `rain_radar`; otherwise
+it connects directly to RainViewer. No account or API key is needed.
 It still works over the range grid when maps are disabled or unavailable.
 
 The image uses RainViewer's Universal Blue colours: pale blue through blue,
@@ -33,7 +33,28 @@ zoom 7, Universal Blue only and 100 requests/IP/minute. Zooming in enlarges thos
 available pixels; it does not add street-level resolution. The free service is
 intended for personal/educational use and has no availability guarantee.
 
-## Resource and network behaviour
+## Optional server offload
+
+Update the Docker server and original firmware to the current development build.
+Keep the existing **Info server URL** in web setup. The server advertises rain
+radar automatically (`ENABLE_RAIN=1`, the default); discovery takes up to a minute.
+Older servers continue to use standalone rendering without errors.
+
+The server downloads and caches tiles, handles PNG decoding and geographic
+stitching, then sends one ready-to-draw 420×420 overlay across the LAN. It keeps
+up to 16 results (about 8 MiB) and 64 decoded tiles (16 MiB) in bounded RAM caches.
+Weather frames expire after three hours, coverage after one day, and metadata
+refreshes every five minutes. Restarting the container clears these rain caches;
+the existing photo/map disk caches are unaffected. Only requested views are built.
+
+A cold request returns HTTP 202 while one background worker prepares it; the
+knob retries once a second. A cached frame is returned immediately, although the
+529 KB LAN transfer still takes time. First loads remain dependent on upstream
+latency. Server errors, invalid packets, or preparation taking over 45 seconds
+switch the knob back to standalone for two minutes. Upstream HTTP 429 pauses
+both paths for two minutes rather than retrying via the same public IP.
+
+## Standalone resource and network behaviour
 
 - Only the visible rain view downloads data; sleep and leaving the view cancel
   unfinished work. Aircraft polling continues with priority between steps.
@@ -43,7 +64,7 @@ intended for personal/educational use and has no availability guarantee.
 - One complete frame is retained in PSRAM, together with the current range's
   coverage mask. History frames are fetched on demand, not animated or prefetched.
   Revisited older frames may need downloading again. No weather tiles are written
-  to flash, and no weather storage is added to the info server.
+  to flash, while the optional server has its own bounded in-memory cache.
 - Peak added pixel/lookup/compressed buffers are roughly 3 MB in PSRAM (including PNG decoder workspace) during a
   refresh, including the previous displayed frame. Steady image plus coverage
   storage is about 690 KiB. Allocation failures leave a visible error and retry.

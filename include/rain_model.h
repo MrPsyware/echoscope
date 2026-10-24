@@ -24,6 +24,13 @@ struct Timeline {
         return count!=0;
     }
 };
+constexpr size_t packetBytes=12+420*420*3;
+inline uint32_t read32(const uint8_t *p) { return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24); }
+inline bool validPacket(const char *data,size_t size,uint32_t stamp) {
+    if(size!=packetBytes || std::memcmp(data,"ECR1",4)) return false;
+    const auto *p=reinterpret_cast<const uint8_t*>(data);
+    return p[4]==0xa4 && p[5]==1 && p[6]==0xa4 && p[7]==1 && read32(p+8)==stamp;
+}
 struct Pixel { uint8_t r,g,b,a; };
 inline Pixel overlay(const uint8_t *rgba,uint8_t coverage,unsigned x,unsigned y) {
     if(coverage>127) return {0x71,0x87,0x82,uint8_t((x+y)%14<3?150:30)};

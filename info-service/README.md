@@ -81,3 +81,19 @@ Attribution and terms: [Open-Meteo](https://open-meteo.com/) / [CC BY 4.0](https
 
 
 Weather pages in 0.8.0 add `layout: "weather"`, `subtitle`, `note` and up to three `cards` to the existing text page format. Each card has a label, condition, temperature/cloud/rain/wind strings, `night` and numeric `icon` (0 clear, 1 partly cloudy, 2 overcast, 3 rain, 4 snow, 5 thunderstorm, 6 fog, 7 unknown). Existing `lines` remain for older firmware. The firmware rejects oversized responses and limits card/page counts. `/v1/route` is unchanged; new firmware presents it beside the selected aircraft's details rather than in INFO.
+
+## Rain radar offload (original knob, 0.17.0-dev.3+)
+
+The server now advertises `rain_radar` in `/health`. Set `ENABLE_RAIN=0` to disable;
+otherwise it is enabled by default. The original knob automatically prefers it,
+with standalone fallback. No API key or additional dependencies are required.
+
+- `GET /v1/rain`: a cached, validated RainViewer history manifest (same host/path/time fields as the public API).
+- `GET /v1/rain/frame?lat=51.5&lon=0&range=25&time=TIMESTAMP`: an `ECR1` overlay packet. Header `<4sHHI` is magic, width 420, height 420 and frame Unix timestamp, followed by 420×420 pixels of big-endian RGB565 plus one alpha byte (529,212 bytes total). Coverage hatching and the circular crop are already applied; the knob draws this over its existing map.
+- Both endpoints return 202 during preparation, 503 on temporary upstream failures, and 429 on provider throttling. Invalid parameters return 400; expired frames return 404. One worker deduplicates requests; it fetches only requested frames and spaces upstream requests by at least 1.1 seconds.
+- Bounded RAM caches hold 16 results and 64 decoded tiles, shared across devices and history/range requests. Frames/tiles expire after three hours, coverage after a day; metadata refreshes every five minutes. No new persistent volume or database migration.
+
+[Weather data by RainViewer](https://www.rainviewer.com/). Past observations only,
+Universal Blue, maximum zoom 7. See the [rain radar guide](../docs/RAIN_RADAR.md)
+for navigation, limitations and fallback behaviour. Existing `0.0.0.0:8086`
+listening and Compose volume settings are unchanged.
